@@ -1,0 +1,38 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "shuban",
+	"compatibility_date": "2026-07-11",
+	"main": "server/index.ts",
+	"assets": {
+		"not_found_handling": "single-page-application"
+	},
+	"observability": {
+		"enabled": true
+	},
+	"upload_source_maps": true,
+	"compatibility_flags": ["nodejs_compat"],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "shuban",
+			"database_id": "7015f078-fb17-4b0a-9c4b-3e7efaa3f8f9",
+			"migrations_dir": "./migrations"
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "BUCKET",
+			"bucket_name": "shuban"
+		}
+	],
+	"ai": {
+		"binding": "AI",
+		"remote": true
+	},
+	"vars": {
+		"OCR_PROVIDER": "gemini,workersai,claude",
+		"GEMINI_MODEL": "gemini-flash-latest",
+		"WORKERSAI_MODEL": "@cf/moonshotai/kimi-k2.6",
+		"CLAUDE_MODEL": "claude-opus-4-8"
+	}
+}

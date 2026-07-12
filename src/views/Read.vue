@@ -69,7 +69,7 @@ onBeforeUnmount(() => {
 // —— 点字 ——
 function onTap(tok: PageToken) {
 	stopListen();
-	speak(tok.t);
+	speak(tok.t, tok.p);
 	recordTap({ ch: tok.t, pinyin: tok.p, articleId });
 	const next = new Set(pool.value);
 	next.add(tok.t);

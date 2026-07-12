@@ -62,7 +62,7 @@ async function nextQuestion() {
 		const q = wrongQuestions.shift();
 		if (!q) return finish();
 		question.value = q;
-		speak(q.ch);
+		speak(q.ch, q.pinyin);
 		return;
 	}
 	if (askedCount.value >= MAX_QUESTIONS) return startRetest();
@@ -73,7 +73,7 @@ async function nextQuestion() {
 		);
 		if (r.done || !r.question) return startRetest();
 		question.value = r.question;
-		speak(r.question.ch);
+		speak(r.question.ch, r.question.pinyin);
 	} catch {
 		startRetest();
 	}
@@ -106,7 +106,7 @@ function answer(choice: string) {
 
 	if (correct) playDing();
 	// 答错高亮正确答案并再播一遍发音巩固
-	if (!correct) speak(q.ch);
+	if (!correct) speak(q.ch, q.pinyin);
 
 	// 重测与练习模式只记流水，不动 Leitner
 	void api('/api/quiz/answer', {
@@ -196,7 +196,7 @@ function playDing() {
 		<div v-else-if="phase === 'question'" class="quiz">
 			<p v-if="!question" class="hint center">出题中…</p>
 			<template v-else>
-				<button type="button" class="speaker" @click="speak(question.ch)">🔊</button>
+				<button type="button" class="speaker" @click="speak(question.ch, question.pinyin)">🔊</button>
 				<p class="ask">听发音，选出正确的字</p>
 				<div class="options">
 					<button

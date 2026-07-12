@@ -10,6 +10,16 @@ const TONE_MAP: Record<string, string> = {
 	ń: 'n', ň: 'n', ǹ: 'n', ḿ: 'm',
 };
 
+const TONE_NUM: Record<string, number> = {
+	ā: 1, á: 2, ǎ: 3, à: 4,
+	ē: 1, é: 2, ě: 3, è: 4,
+	ī: 1, í: 2, ǐ: 3, ì: 4,
+	ō: 1, ó: 2, ǒ: 3, ò: 4,
+	ū: 1, ú: 2, ǔ: 3, ù: 4,
+	ǖ: 1, ǘ: 2, ǚ: 3, ǜ: 4,
+	ń: 2, ň: 3, ǹ: 4, ḿ: 2,
+};
+
 /** 去掉声调符号（ǚ→ü 保留 ü 本体） */
 export function stripTone(pinyin: string): string {
 	let out = '';
@@ -32,4 +42,25 @@ export function initialOf(pinyin: string): string {
 export function finalOf(pinyin: string): string {
 	const s = stripTone(pinyin);
 	return s.slice(initialOf(pinyin).length);
+}
+
+/**
+ * 带调拼音 → 真人音节录音库文件名（davinfifield/mp3-chinese-pinyin-sound 命名）：
+ * xiǎo→xiao3、lǜ→luu4（ü 写作 uu）、轻声无调号→5（de→de5）。
+ * 非法输入返回 null。
+ */
+export function syllableFileName(pinyin: string): string | null {
+	const norm = pinyin.trim().toLowerCase().normalize('NFC');
+	if (!norm) return null;
+	let tone = 5;
+	for (const c of norm) {
+		const t = TONE_NUM[c];
+		if (t) {
+			tone = t;
+			break;
+		}
+	}
+	const base = stripTone(norm).replace(/ü/g, 'uu');
+	if (!/^[a-z]{1,7}$/.test(base)) return null;
+	return `${base}${tone}`;
 }

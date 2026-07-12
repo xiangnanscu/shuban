@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { finalOf, initialOf, stripTone } from '../server/lib/pinyin';
+import { finalOf, initialOf, stripTone, syllableFileName } from '../server/lib/pinyin';
 
 describe('stripTone', () => {
 	it('去掉各调号', () => {
@@ -28,5 +28,31 @@ describe('initialOf / finalOf', () => {
 		expect(initialOf('ér')).toBe('');
 		expect(finalOf('ér')).toBe('er');
 		expect(initialOf('ān')).toBe('');
+	});
+});
+
+describe('syllableFileName', () => {
+	it('声调符号转数字', () => {
+		expect(syllableFileName('xiǎo')).toBe('xiao3');
+		expect(syllableFileName('cáng')).toBe('cang2');
+		expect(syllableFileName('ér')).toBe('er2');
+		expect(syllableFileName('zhǎng')).toBe('zhang3');
+	});
+
+	it('ü 写作 uu', () => {
+		expect(syllableFileName('lǜ')).toBe('luu4');
+		expect(syllableFileName('nǚ')).toBe('nuu3');
+		expect(syllableFileName('nüè')).toBe('nuue4');
+	});
+
+	it('轻声记 5', () => {
+		expect(syllableFileName('de')).toBe('de5');
+		expect(syllableFileName('ma')).toBe('ma5');
+	});
+
+	it('非法输入返回 null', () => {
+		expect(syllableFileName('')).toBeNull();
+		expect(syllableFileName('小')).toBeNull();
+		expect(syllableFileName('abc123')).toBeNull();
 	});
 });

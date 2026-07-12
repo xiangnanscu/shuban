@@ -4,7 +4,7 @@
 // - /api/admin、/api/auth、所有非 GET → 不缓存
 const CACHE = 'shuban-v1';
 
-const CACHE_FIRST = [/^\/assets\//, /^\/api\/files\//, /^\/icon\.svg$/, /^\/favicon\.ico$/, /^\/manifest\.webmanifest$/];
+const CACHE_FIRST = [/^\/assets\//, /^\/api\/files\//, /^\/icon(-maskable)?\.svg$/, /^\/favicon\.ico$/, /^\/manifest\.webmanifest$/];
 const NETWORK_FIRST = [/^\/api\/articles/, /^\/api\/pool/, /^\/api\/review\/due/, /^\/api\/stats\/summary/, /^\/api\/recordings$/];
 
 self.addEventListener('install', () => {

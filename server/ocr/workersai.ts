@@ -12,6 +12,7 @@ interface ChatResponse {
 export function workersAiProvider(ai: Ai, model: string): OcrProvider {
 	return {
 		async recognize(image, { isFirstPage }) {
+			// ai.run 不支持 AbortSignal；超时由 ocr-run.ts 的 Promise.race 兜底
 			const payload = {
 				messages: [
 					{ role: 'system', content: OCR_SYSTEM_PROMPT },

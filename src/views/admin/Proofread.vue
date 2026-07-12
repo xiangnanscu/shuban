@@ -23,6 +23,16 @@ const editPy = ref('');
 const hasPending = computed(() => pages.some((p) => p.ocrStatus === 'pending'));
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
+// 识别开始时间，用于判断是否"卡住"（正常应在服务端超时窗口内转为 done/failed）
+const pendingSince = reactive<Record<number, number>>({});
+const now = ref(Date.now());
+const STUCK_MS = 100_000;
+
+function isStuck(page: ArticlePage): boolean {
+	const since = pendingSince[page.id];
+	return page.ocrStatus === 'pending' && since !== undefined && now.value - since > STUCK_MS;
+}
+
 async function load(initial = false) {
 	const a = await api<ArticleDetail>(`/api/articles/${articleId}`);
 	title.value = initial ? a.title : title.value || a.title;
@@ -31,10 +41,12 @@ async function load(initial = false) {
 		const local = pages.find((x) => x.id === p.id);
 		if (!local) {
 			pages.push(p);
+			if (p.ocrStatus === 'pending') pendingSince[p.id] = Date.now();
 		} else if (local.ocrStatus === 'pending') {
 			// 只覆盖仍在识别中的页，避免轮询冲掉本地已做的修改
 			local.ocrStatus = p.ocrStatus;
 			local.content = p.content;
+			if (p.ocrStatus !== 'pending') delete pendingSince[p.id];
 		}
 	}
 	syncPolling();
@@ -42,7 +54,10 @@ async function load(initial = false) {
 
 function syncPolling() {
 	if (hasPending.value && !pollTimer) {
-		pollTimer = setInterval(() => void load(), 2500);
+		pollTimer = setInterval(() => {
+			now.value = Date.now();
+			void load();
+		}, 2500);
 	} else if (!hasPending.value && pollTimer) {
 		clearInterval(pollTimer);
 		pollTimer = null;
@@ -148,6 +163,7 @@ async function reOcr(page: ArticlePage) {
 	await api(`/api/admin/pages/${page.id}/ocr`, { method: 'POST' });
 	page.ocrStatus = 'pending';
 	page.content = { lines: [] };
+	pendingSince[page.id] = Date.now();
 	syncPolling();
 }
 </script>
@@ -176,18 +192,21 @@ async function reOcr(page: ArticlePage) {
 					{{ showImage[page.id] ? '收起原图' : '对照原图' }}
 				</button>
 				<button
-					v-if="page.ocrStatus !== 'pending'"
+					v-if="page.ocrStatus !== 'pending' || isStuck(page)"
 					type="button"
 					class="btn ghost small"
 					@click="reOcr(page)"
 				>
-					重新识别
+					{{ isStuck(page) ? '卡住了？重新识别' : '重新识别' }}
 				</button>
 			</header>
 
 			<img v-if="showImage[page.id]" :src="page.imageUrl" class="original" alt="原书页面" />
 
-			<p v-if="page.ocrStatus === 'pending'" class="hint">识别中，请稍候…（约 10~30 秒）</p>
+			<p v-if="page.ocrStatus === 'pending' && !isStuck(page)" class="hint">识别中，请稍候…（约 10~30 秒）</p>
+			<p v-else-if="page.ocrStatus === 'pending' && isStuck(page)" class="hint fail">
+				识别耗时较长，可能已卡住，可点"卡住了？重新识别"重试，或删除本篇重拍。
+			</p>
 			<p v-else-if="page.ocrStatus === 'failed'" class="hint fail">识别失败：图片可能过长或模糊，可点"重新识别"或删除本篇重拍。</p>
 
 			<div v-for="(line, li) in page.content.lines" :key="li" class="linebox">

@@ -17,5 +17,5 @@ export interface PageContent {
 }
 
 export interface OcrProvider {
-	recognize(image: ArrayBuffer, opts: { isFirstPage: boolean }): Promise<PageContent>;
+	recognize(image: ArrayBuffer, opts: { isFirstPage: boolean; signal: AbortSignal }): Promise<PageContent>;
 }

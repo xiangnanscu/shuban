@@ -1,0 +1,11 @@
+{
+	"name": "书伴",
+	"short_name": "书伴",
+	"description": "纸质书伴读：拼音点读、生字复习、朗读录音",
+	"start_url": "/",
+	"display": "standalone",
+	"background_color": "#faf6ee",
+	"theme_color": "#faf6ee",
+	"lang": "zh-CN",
+	"icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

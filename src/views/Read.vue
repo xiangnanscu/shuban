@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import PinyinToggle from '@/components/PinyinToggle.vue';
+import Recorder from '@/components/Recorder.vue';
 import RubyLine from '@/components/RubyLine.vue';
 import { api } from '@/composables/useApi';
 import { recordTap } from '@/composables/useTapQueue';
-import { speak } from '@/composables/useTts';
+import { cancelSpeak, speak, speakAsync } from '@/composables/useTts';
 import type { ArticleDetail, PageLine, PageToken, PinyinMode } from '@/types';
 
 const route = useRoute();
@@ -15,6 +16,7 @@ const article = ref<ArticleDetail | null>(null);
 const pool = ref<Set<string>>(new Set());
 const pageIdx = ref(0);
 const showImage = ref(false);
+const showRecorder = ref(false);
 const error = ref('');
 
 const MODE_KEY = 'shuban.pinyinMode';
@@ -26,7 +28,23 @@ function setMode(m: PinyinMode) {
 
 const page = computed(() => article.value?.pages[pageIdx.value] ?? null);
 
+// —— 阅读会话（打卡统计） ——
+let sessionId: number | null = null;
+
+function endSession() {
+	if (sessionId === null) return;
+	const payload = JSON.stringify({ sessionId });
+	sessionId = null;
+	if (navigator.sendBeacon) {
+		navigator.sendBeacon('/api/sessions/end', new Blob([payload], { type: 'application/json' }));
+	} else {
+		void fetch('/api/sessions/end', { method: 'POST', body: payload, keepalive: true }).catch(() => {});
+	}
+}
+const onPageHide = () => endSession();
+
 onMounted(async () => {
+	window.addEventListener('pagehide', onPageHide);
 	try {
 		const [a, p] = await Promise.all([api<ArticleDetail>(`/api/articles/${articleId}`), api<string[]>('/api/pool')]);
 		article.value = a;
@@ -34,9 +52,26 @@ onMounted(async () => {
 	} catch (e) {
 		error.value = e instanceof Error ? e.message : '加载失败';
 	}
+	try {
+		const s = await api<{ sessionId: number }>('/api/sessions/start', {
+			method: 'POST',
+			body: JSON.stringify({ articleId }),
+		});
+		sessionId = s.sessionId;
+	} catch {
+		/* 打卡失败不影响阅读 */
+	}
 });
 
+onBeforeUnmount(() => {
+	window.removeEventListener('pagehide', onPageHide);
+	stopListen();
+	endSession();
+});
+
+// —— 点字 ——
 function onTap(tok: PageToken) {
+	stopListen();
 	speak(tok.t);
 	recordTap({ ch: tok.t, pinyin: tok.p, articleId });
 	const next = new Set(pool.value);
@@ -45,8 +80,50 @@ function onTap(tok: PageToken) {
 }
 
 function speakLine(line: PageLine) {
+	stopListen();
 	speak(line.tokens.map((t) => t.t).join(''));
 }
+
+// —— 听全文（逐行跟随） ——
+const listenState = ref<'idle' | 'playing' | 'paused'>('idle');
+const currentLine = ref(-1);
+let playToken = 0;
+
+async function playFrom(startIdx: number) {
+	const my = ++playToken;
+	listenState.value = 'playing';
+	const lines = page.value?.content.lines ?? [];
+	for (let i = startIdx; i < lines.length; i++) {
+		if (playToken !== my || listenState.value !== 'playing') return;
+		currentLine.value = i;
+		document.getElementById(`line-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+		const text = lines[i]?.tokens.map((t) => t.t).join('') ?? '';
+		if (!text) continue;
+		await speakAsync(text);
+	}
+	if (playToken === my && listenState.value === 'playing') stopListen();
+}
+
+function toggleListen() {
+	if (listenState.value === 'playing') {
+		// 暂停 = 停当前行，记住位置（iOS 的 pause/resume 不可靠，重启更稳）
+		listenState.value = 'paused';
+		playToken++;
+		cancelSpeak();
+	} else {
+		void playFrom(listenState.value === 'paused' && currentLine.value >= 0 ? currentLine.value : 0);
+	}
+}
+
+function stopListen() {
+	if (listenState.value === 'idle') return;
+	listenState.value = 'idle';
+	currentLine.value = -1;
+	playToken++;
+	cancelSpeak();
+}
+
+watch(pageIdx, () => stopListen());
 </script>
 
 <template>
@@ -65,11 +142,27 @@ function speakLine(line: PageLine) {
 		<template v-else>
 			<h1 class="title">{{ article.title || '未命名' }}</h1>
 
+			<div class="toolbar">
+				<button type="button" class="btn ghost small" @click="toggleListen">
+					{{ listenState === 'playing' ? '⏸ 暂停' : listenState === 'paused' ? '▶ 继续' : '▶ 听全文' }}
+				</button>
+				<button v-if="listenState !== 'idle'" type="button" class="btn ghost small" @click="stopListen">⏹ 停止</button>
+				<span class="grow" />
+				<button type="button" class="btn small" @click="showRecorder = true">🎙️ 朗读模式</button>
+				<RouterLink class="btn ghost small" :to="`/recordings?articleId=${articleId}`">录音历史</RouterLink>
+			</div>
+
 			<img v-if="showImage && page" :src="page.imageUrl" class="original" alt="原书页面" />
 
 			<main v-if="page" class="content">
 				<p v-if="page.ocrStatus !== 'done'" class="hint">这一页还在识别中…</p>
-				<div v-for="(line, li) in page.content.lines" :key="li" class="line-row">
+				<div
+					v-for="(line, li) in page.content.lines"
+					:id="`line-${li}`"
+					:key="li"
+					class="line-row"
+					:class="{ active: li === currentLine && listenState !== 'idle' }"
+				>
 					<RubyLine :line="line" :mode="mode" :known-set="pool" @tap="onTap" />
 					<button
 						v-if="line.tokens.length > 0"
@@ -90,6 +183,13 @@ function speakLine(line: PageLine) {
 					下一页 ›
 				</button>
 			</nav>
+
+			<Recorder
+				v-if="showRecorder"
+				:article-id="articleId"
+				:article-title="article.title"
+				@close="showRecorder = false"
+			/>
 		</template>
 	</div>
 </template>
@@ -115,8 +215,18 @@ function speakLine(line: PageLine) {
 .title {
 	text-align: center;
 	font-size: clamp(30px, 7vw, 48px);
-	margin: 12px 0 20px;
+	margin: 12px 0 12px;
 	color: var(--ink);
+}
+.toolbar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+	margin-bottom: 14px;
+}
+.grow {
+	flex: 1;
 }
 .original {
 	width: 100%;
@@ -128,6 +238,12 @@ function speakLine(line: PageLine) {
 	display: flex;
 	align-items: baseline;
 	gap: 6px;
+	border-radius: 12px;
+	padding: 0 4px;
+}
+.line-row.active {
+	background: rgba(217, 119, 54, 0.14);
+	outline: 2px solid rgba(217, 119, 54, 0.4);
 }
 .line-row > :first-child {
 	flex: 1;

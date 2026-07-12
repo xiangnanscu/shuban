@@ -62,4 +62,30 @@ export interface PoolItem {
 	totalTaps: number;
 }
 
+export interface RecordingItem {
+	id: number;
+	articleId: number | null;
+	articleTitle: string;
+	url: string;
+	durationSec: number | null;
+	sizeBytes: number | null;
+	createdAt: string;
+}
+
+export interface StatsSummary {
+	streak: number;
+	activeToday: boolean;
+	articlesRead: number;
+	poolActive: number;
+	graduated: number;
+	dueToday: number;
+	topChars: { ch: string; pinyin: string; taps: number }[];
+}
+
+export interface PoolDetailItem {
+	ch: string;
+	pinyin: string;
+	graduated: boolean;
+}
+
 export const isHan = (s: string): boolean => /\p{Script=Han}/u.test(s);

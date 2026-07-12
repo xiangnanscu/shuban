@@ -53,6 +53,10 @@ onMounted(async () => {
 		<footer class="foot">
 			<RouterLink to="/quiz" class="small">复习测验</RouterLink>
 			·
+			<RouterLink to="/stats" class="small">学习报告</RouterLink>
+			·
+			<RouterLink to="/recordings" class="small">录音历史</RouterLink>
+			·
 			<RouterLink to="/admin" class="small">家长区</RouterLink>
 		</footer>
 	</div>

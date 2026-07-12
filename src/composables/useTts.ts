@@ -19,19 +19,33 @@ if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
 	speechSynthesis.addEventListener('voiceschanged', refreshVoices);
 }
 
-function playFallback(text: string) {
-	fallbackAudio?.pause();
-	fallbackAudio = new Audio(`/api/tts/${encodeURIComponent(text)}`);
-	void fallbackAudio.play().catch(() => {
-		/* 兜底也失败：静默（UI 已有拼音可读） */
-	});
+function useServerFallback(): boolean {
+	const hasSynthesis = typeof window !== 'undefined' && 'speechSynthesis' in window;
+	return !hasSynthesis || (voicesLoaded && !zhVoice);
 }
 
+/** 停掉当前一切发音（本地合成 + 兜底音频） */
+export function cancelSpeak(): void {
+	if (typeof window !== 'undefined' && 'speechSynthesis' in window) speechSynthesis.cancel();
+	fallbackAudio?.pause();
+	fallbackAudio = null;
+}
+
+function playFallback(text: string, onDone?: () => void) {
+	fallbackAudio?.pause();
+	const audio = new Audio(`/api/tts/${encodeURIComponent(text)}`);
+	fallbackAudio = audio;
+	if (onDone) {
+		audio.onended = onDone;
+		audio.onerror = onDone;
+	}
+	void audio.play().catch(() => onDone?.());
+}
+
+/** 即发即忘（点字、选项发音） */
 export function speak(text: string): void {
 	if (!text) return;
-	const hasSynthesis = typeof window !== 'undefined' && 'speechSynthesis' in window;
-	// voices 已加载但没有任何中文语音 → 直接走服务端兜底
-	if (!hasSynthesis || (voicesLoaded && !zhVoice)) {
+	if (useServerFallback()) {
 		playFallback(text);
 		return;
 	}
@@ -43,6 +57,25 @@ export function speak(text: string): void {
 	speechSynthesis.speak(u);
 }
 
+/** 朗读并等待结束（"听全文"逐行链式播放用）。被 cancelSpeak 打断也会 resolve。 */
+export function speakAsync(text: string): Promise<void> {
+	return new Promise((resolve) => {
+		if (!text) return resolve();
+		if (useServerFallback()) {
+			playFallback(text, resolve);
+			return;
+		}
+		speechSynthesis.cancel();
+		const u = new SpeechSynthesisUtterance(text);
+		u.lang = 'zh-CN';
+		if (zhVoice) u.voice = zhVoice;
+		u.rate = 0.8;
+		u.onend = () => resolve();
+		u.onerror = () => resolve();
+		speechSynthesis.speak(u);
+	});
+}
+
 export function useTts() {
-	return { speak };
+	return { speak, speakAsync, cancelSpeak };
 }

@@ -141,6 +141,43 @@ export const adminRoutes = new Hono<AppEnv>()
 		);
 	})
 
+	// 删除录音（R2 + 记录）
+	.delete('/recordings/:id', async (c) => {
+		const id = Number(c.req.param('id'));
+		if (!Number.isInteger(id)) return c.json(err('bad_id', '无效 id'), 400);
+		const row = await c.env.DB.prepare('DELETE FROM recordings WHERE id = ?1 RETURNING r2_key')
+			.bind(id)
+			.first<{ r2_key: string }>();
+		if (!row) return c.json(err('not_found', '录音不存在'), 404);
+		await c.env.BUCKET.delete(row.r2_key);
+		return c.json(ok({ id }));
+	})
+
+	// 数据导出（学习数据 JSON 备份；不含 PIN 等 settings）
+	.get('/export', async (c) => {
+		const tables = [
+			'articles',
+			'pages',
+			'chars',
+			'tap_events',
+			'review_items',
+			'quiz_answers',
+			'recordings',
+			'reading_sessions',
+		] as const;
+		const data: Record<string, unknown[]> = {};
+		for (const t of tables) {
+			data[t] = (await c.env.DB.prepare(`SELECT * FROM ${t}`).all()).results;
+		}
+		const body = JSON.stringify({ app: 'shuban', version: 1, exportedAt: new Date().toISOString(), data });
+		return new Response(body, {
+			headers: {
+				'content-type': 'application/json; charset=utf-8',
+				'content-disposition': `attachment; filename="shuban-export-${new Date().toISOString().slice(0, 10)}.json"`,
+			},
+		});
+	})
+
 	// 生字池清理（误点）
 	.delete('/review/:ch', async (c) => {
 		const ch = c.req.param('ch');

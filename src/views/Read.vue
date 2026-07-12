@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import PinyinToggle from '@/components/PinyinToggle.vue';
 import Recorder from '@/components/Recorder.vue';
@@ -14,7 +14,6 @@ const articleId = Number(route.params.id);
 
 const article = ref<ArticleDetail | null>(null);
 const pool = ref<Set<string>>(new Set());
-const pageIdx = ref(0);
 const showImage = ref(false);
 const showRecorder = ref(false);
 const error = ref('');
@@ -25,8 +24,6 @@ function setMode(m: PinyinMode) {
 	mode.value = m;
 	localStorage.setItem(MODE_KEY, m);
 }
-
-const page = computed(() => article.value?.pages[pageIdx.value] ?? null);
 
 // —— 阅读会话（打卡统计） ——
 let sessionId: number | null = null;
@@ -84,22 +81,27 @@ function speakLine(line: PageLine) {
 	speak(line.tokens.map((t) => t.t).join(''));
 }
 
-// —— 听全文（逐行跟随） ——
+// —— 听全文（逐行跟随，跨页连续播放） ——
 const listenState = ref<'idle' | 'playing' | 'paused'>('idle');
+const currentPage = ref(-1);
 const currentLine = ref(-1);
 let playToken = 0;
 
-async function playFrom(startIdx: number) {
+async function playFrom(startPi: number, startLi: number) {
 	const my = ++playToken;
 	listenState.value = 'playing';
-	const lines = page.value?.content.lines ?? [];
-	for (let i = startIdx; i < lines.length; i++) {
-		if (playToken !== my || listenState.value !== 'playing') return;
-		currentLine.value = i;
-		document.getElementById(`line-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-		const text = lines[i]?.tokens.map((t) => t.t).join('') ?? '';
-		if (!text) continue;
-		await speakAsync(text);
+	const pages = article.value?.pages ?? [];
+	for (let pi = startPi; pi < pages.length; pi++) {
+		const lines = pages[pi]?.content.lines ?? [];
+		for (let li = pi === startPi ? startLi : 0; li < lines.length; li++) {
+			if (playToken !== my || listenState.value !== 'playing') return;
+			currentPage.value = pi;
+			currentLine.value = li;
+			document.getElementById(`line-${pi}-${li}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+			const text = lines[li]?.tokens.map((t) => t.t).join('') ?? '';
+			if (!text) continue;
+			await speakAsync(text);
+		}
 	}
 	if (playToken === my && listenState.value === 'playing') stopListen();
 }
@@ -111,19 +113,21 @@ function toggleListen() {
 		playToken++;
 		cancelSpeak();
 	} else {
-		void playFrom(listenState.value === 'paused' && currentLine.value >= 0 ? currentLine.value : 0);
+		void playFrom(
+			listenState.value === 'paused' && currentPage.value >= 0 ? currentPage.value : 0,
+			listenState.value === 'paused' && currentPage.value >= 0 ? currentLine.value : 0,
+		);
 	}
 }
 
 function stopListen() {
 	if (listenState.value === 'idle') return;
 	listenState.value = 'idle';
+	currentPage.value = -1;
 	currentLine.value = -1;
 	playToken++;
 	cancelSpeak();
 }
-
-watch(pageIdx, () => stopListen());
 </script>
 
 <template>
@@ -152,37 +156,31 @@ watch(pageIdx, () => stopListen());
 				<RouterLink class="btn ghost small" :to="`/recordings?articleId=${articleId}`">录音历史</RouterLink>
 			</div>
 
-			<img v-if="showImage && page" :src="page.imageUrl" class="original" alt="原书页面" />
+			<section v-for="(pg, pi) in article.pages" :key="pg.id" class="page-section">
+				<img v-if="showImage" :src="pg.imageUrl" class="original" alt="原书页面" />
 
-			<main v-if="page" class="content">
-				<p v-if="page.ocrStatus !== 'done'" class="hint">这一页还在识别中…</p>
-				<div
-					v-for="(line, li) in page.content.lines"
-					:id="`line-${li}`"
-					:key="li"
-					class="line-row"
-					:class="{ active: li === currentLine && listenState !== 'idle' }"
-				>
-					<RubyLine :line="line" :mode="mode" :known-set="pool" @tap="onTap" />
-					<button
-						v-if="line.tokens.length > 0"
-						type="button"
-						class="speaker"
-						aria-label="朗读这一行"
-						@click="speakLine(line)"
+				<main class="content">
+					<p v-if="pg.ocrStatus !== 'done'" class="hint">这一页还在识别中…</p>
+					<div
+						v-for="(line, li) in pg.content.lines"
+						:id="`line-${pi}-${li}`"
+						:key="li"
+						class="line-row"
+						:class="{ active: pi === currentPage && li === currentLine && listenState !== 'idle' }"
 					>
-						🔊
-					</button>
-				</div>
-			</main>
-
-			<nav v-if="article.pages.length > 1" class="pager">
-				<button type="button" class="btn" :disabled="pageIdx === 0" @click="pageIdx--">‹ 上一页</button>
-				<span class="pageno">第 {{ pageIdx + 1 }} / {{ article.pages.length }} 页</span>
-				<button type="button" class="btn" :disabled="pageIdx === article.pages.length - 1" @click="pageIdx++">
-					下一页 ›
-				</button>
-			</nav>
+						<RubyLine :line="line" :mode="mode" :known-set="pool" @tap="onTap" />
+						<button
+							v-if="line.tokens.length > 0"
+							type="button"
+							class="speaker"
+							aria-label="朗读这一行"
+							@click="speakLine(line)"
+						>
+							🔊
+						</button>
+					</div>
+				</main>
+			</section>
 
 			<Recorder
 				v-if="showRecorder"
@@ -260,15 +258,10 @@ watch(pageIdx, () => stopListen());
 .speaker:active {
 	opacity: 1;
 }
-.pager {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
+.page-section + .page-section {
 	margin-top: 28px;
-}
-.pageno {
-	color: #9a8a70;
-	font-size: 15px;
+	padding-top: 24px;
+	border-top: 1px dashed rgba(154, 138, 112, 0.35);
 }
 .hint {
 	color: #9a8a70;

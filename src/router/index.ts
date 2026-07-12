@@ -9,6 +9,9 @@ const router = createRouter({
 		{ path: '/', name: 'home', component: Home },
 		{ path: '/read/:id', name: 'read', component: Read },
 		{ path: '/quiz', name: 'quiz', component: () => import('@/views/Quiz.vue') },
+		{ path: '/stats', name: 'stats', component: () => import('@/views/Stats.vue') },
+		{ path: '/recordings', name: 'recordings', component: () => import('@/views/Recordings.vue') },
+		{ path: '/print/chars', name: 'print-chars', component: () => import('@/views/PrintChars.vue') },
 		{ path: '/admin/login', name: 'admin-login', component: () => import('@/views/admin/Login.vue') },
 		{ path: '/admin', name: 'admin', component: () => import('@/views/admin/Manage.vue'), meta: { admin: true } },
 		{

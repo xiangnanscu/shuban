@@ -58,6 +58,7 @@ async function logout() {
 			<div class="actions">
 				<RouterLink to="/admin/upload" class="btn">＋ 上传新文章</RouterLink>
 				<RouterLink to="/admin/pool" class="btn ghost small">生字池</RouterLink>
+				<a href="/api/admin/export" download class="btn ghost small">导出数据</a>
 				<button type="button" class="btn ghost small" @click="showPinForm = !showPinForm">修改 PIN</button>
 				<button type="button" class="btn ghost small" @click="logout">退出</button>
 			</div>

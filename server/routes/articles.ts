@@ -8,6 +8,7 @@ interface ArticleRow {
 	title: string;
 	status: string;
 	cover_key: string | null;
+	cover_version: number | null;
 	created_at: string;
 	page_count: number;
 }
@@ -16,6 +17,7 @@ interface PageRow {
 	id: number;
 	page_no: number;
 	image_key: string;
+	image_version: number;
 	ocr_status: string;
 	content_json: string;
 }
@@ -27,7 +29,8 @@ export const articleRoutes = new Hono<AppEnv>()
 		const where = authed ? '' : "WHERE a.status = 'published'";
 		const { results } = await c.env.DB.prepare(
 			`SELECT a.id, a.title, a.status, a.cover_key, a.created_at,
-			        (SELECT COUNT(*) FROM pages p WHERE p.article_id = a.id) AS page_count
+			        (SELECT COUNT(*) FROM pages p WHERE p.article_id = a.id) AS page_count,
+			        (SELECT image_version FROM pages p WHERE p.article_id = a.id AND p.page_no = 1) AS cover_version
 			 FROM articles a ${where} ORDER BY a.id DESC`,
 		).all<ArticleRow>();
 
@@ -37,7 +40,7 @@ export const articleRoutes = new Hono<AppEnv>()
 					id: a.id,
 					title: a.title,
 					status: a.status,
-					coverUrl: a.cover_key ? `/api/files/${a.cover_key}` : null,
+					coverUrl: a.cover_key ? `/api/files/${a.cover_key}?v=${a.cover_version ?? 1}` : null,
 					pageCount: a.page_count,
 					createdAt: a.created_at,
 				})),
@@ -53,7 +56,7 @@ export const articleRoutes = new Hono<AppEnv>()
 			'SELECT id, title, status, cover_key, created_at FROM articles WHERE id = ?1',
 		)
 			.bind(id)
-			.first<Omit<ArticleRow, 'page_count'>>();
+			.first<Omit<ArticleRow, 'page_count' | 'cover_version'>>();
 		if (!article) return c.json(err('not_found', '文章不存在'), 404);
 
 		if (article.status !== 'published' && !(await isAuthed(c))) {
@@ -61,7 +64,7 @@ export const articleRoutes = new Hono<AppEnv>()
 		}
 
 		const { results: pages } = await c.env.DB.prepare(
-			'SELECT id, page_no, image_key, ocr_status, content_json FROM pages WHERE article_id = ?1 ORDER BY page_no',
+			'SELECT id, page_no, image_key, image_version, ocr_status, content_json FROM pages WHERE article_id = ?1 ORDER BY page_no',
 		)
 			.bind(id)
 			.all<PageRow>();
@@ -75,7 +78,7 @@ export const articleRoutes = new Hono<AppEnv>()
 				pages: pages.map((p) => ({
 					id: p.id,
 					pageNo: p.page_no,
-					imageUrl: `/api/files/${p.image_key}`,
+					imageUrl: `/api/files/${p.image_key}?v=${p.image_version}`,
 					ocrStatus: p.ocr_status,
 					content: JSON.parse(p.content_json) as { lines: unknown[] },
 				})),

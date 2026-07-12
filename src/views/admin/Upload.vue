@@ -4,9 +4,11 @@ import { useRouter } from 'vue-router';
 import { api, ApiError } from '@/composables/useApi';
 import { compressImage } from '@/lib/compressImage';
 
+type Rotation = 0 | 90 | 180 | 270;
+
 const router = useRouter();
 const title = ref('');
-const files = ref<{ file: File; url: string }[]>([]);
+const files = ref<{ file: File; url: string; rotation: Rotation }[]>([]);
 const busy = ref(false);
 const progress = ref('');
 const msg = ref('');
@@ -15,9 +17,15 @@ function onPick(e: Event) {
 	const input = e.target as HTMLInputElement;
 	for (const f of input.files ?? []) {
 		if (files.value.length >= 20) break;
-		files.value.push({ file: f, url: URL.createObjectURL(f) });
+		files.value.push({ file: f, url: URL.createObjectURL(f), rotation: 0 });
 	}
 	input.value = '';
+}
+
+function rotateAt(i: number) {
+	const item = files.value[i];
+	if (!item) return;
+	item.rotation = (((item.rotation + 90) % 360) as Rotation);
 }
 
 function removeAt(i: number) {
@@ -39,7 +47,7 @@ async function submit() {
 		form.set('title', title.value.trim());
 		for (const [i, item] of files.value.entries()) {
 			progress.value = `压缩图片 ${i + 1}/${files.value.length}…`;
-			const blob = await compressImage(item.file);
+			const blob = await compressImage(item.file, 1568, 0.85, item.rotation);
 			form.append('images', new File([blob], `${i + 1}.jpg`, { type: 'image/jpeg' }));
 		}
 		progress.value = '上传并开始识别…';
@@ -68,8 +76,9 @@ async function submit() {
 
 		<div v-if="files.length" class="thumbs">
 			<div v-for="(f, i) in files" :key="f.url" class="thumb">
-				<img :src="f.url" alt="" />
+				<img :src="f.url" :style="{ transform: `rotate(${f.rotation}deg)` }" alt="" />
 				<span class="no">{{ i + 1 }}</span>
+				<button type="button" class="rotate" aria-label="旋转" @click="rotateAt(i)">↻</button>
 				<button type="button" class="rm" aria-label="移除" @click="removeAt(i)">✕</button>
 			</div>
 		</div>
@@ -114,7 +123,9 @@ h1 {
 .thumb img {
 	width: 100%;
 	height: 100%;
-	object-fit: cover;
+	object-fit: contain;
+	background: #f3ead9;
+	transition: transform 0.15s ease;
 }
 .no {
 	position: absolute;
@@ -126,9 +137,9 @@ h1 {
 	padding: 1px 7px;
 	font-size: 12px;
 }
-.rm {
+.rm,
+.rotate {
 	position: absolute;
-	right: 4px;
 	top: 4px;
 	border: 0;
 	background: rgba(0, 0, 0, 0.55);
@@ -137,6 +148,13 @@ h1 {
 	width: 24px;
 	height: 24px;
 	cursor: pointer;
+}
+.rm {
+	right: 4px;
+}
+.rotate {
+	right: 32px;
+	font-size: 15px;
 }
 .err {
 	color: var(--danger);

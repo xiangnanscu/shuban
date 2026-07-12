@@ -229,7 +229,8 @@ CREATE TABLE pages (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   article_id   INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
   page_no      INTEGER NOT NULL,
-  image_key    TEXT NOT NULL,                         -- R2 key
+  image_key      TEXT NOT NULL,                       -- R2 key
+  image_version  INTEGER NOT NULL DEFAULT 1,           -- 替换/旋转原图后自增，用于给 /api/files 的 immutable 缓存加 ?v= 破缓存
   ocr_status   TEXT NOT NULL DEFAULT 'pending' CHECK (ocr_status IN ('pending','done','failed')),
   content_json TEXT NOT NULL DEFAULT '{"lines":[]}',
   UNIQUE (article_id, page_no)
@@ -358,6 +359,7 @@ Base：同域 `/api`。响应统一 `{ ok: true, data }` 或 `{ ok: false, error
 | POST | `/api/auth/logout` | 清 cookie |
 | POST | `/api/admin/articles` | multipart：`images[]`（已压缩 JPEG）→ 建 draft 文章 + pages（存 R2）→ **逐页异步触发 OCR** → 返回 `{articleId}`；前端轮询 `GET /api/articles/:id` 看 `ocr_status` |
 | POST | `/api/admin/pages/:id/ocr` | 重跑单页 OCR；`?hires=1` 用原图重跑 |
+| POST | `/api/admin/pages/:id/image` | multipart：`image`（替换原图，如校对时修正拍歪/拍倒）→ 覆盖 R2 对象、`image_version+1`、`ocr_status='pending'` 并自动重新识别 |
 | PUT | `/api/admin/articles/:id` | 更新 `title` / `status` / 各页 `content_json`（校对保存） |
 | DELETE | `/api/admin/articles/:id` | 级联删 pages + R2 图片 |
 | DELETE | `/api/admin/recordings/:id` | 删录音 |

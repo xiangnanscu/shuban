@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, ApiError } from '@/composables/useApi';
+import { rotateImageBlob } from '@/lib/rotateImage';
 import type { ArticleDetail, ArticlePage, PageLine, PinyinMode } from '@/types';
 
 const route = useRoute();
@@ -14,6 +15,10 @@ const pages = reactive<ArticlePage[]>([]);
 const showImage = reactive<Record<number, boolean>>({});
 const msg = ref('');
 const busy = ref(false);
+
+// 原图旋转：先本地预览（CSS transform），确认后再真正裁切上传并重新识别
+const rotatePreview = reactive<Record<number, 0 | 90 | 180 | 270>>({});
+const rotating = ref<number | null>(null);
 
 // 选中的 token：页/行/列 + 编辑缓冲
 const sel = ref<{ pi: number; li: number; ti: number } | null>(null);
@@ -166,6 +171,42 @@ async function reOcr(page: ArticlePage) {
 	pendingSince[page.id] = Date.now();
 	syncPolling();
 }
+
+// —— 原图旋转（拍歪/拍倒时用）——
+
+function cycleRotatePreview(pageId: number) {
+	rotatePreview[pageId] = (((rotatePreview[pageId] ?? 0) + 90) % 360) as 0 | 90 | 180 | 270;
+}
+
+async function applyRotation(page: ArticlePage) {
+	const deg = rotatePreview[page.id];
+	if (!deg) return;
+	if (!confirm('保存旋转会重新识别本页文字（含手动修改会被覆盖），继续？')) return;
+	rotating.value = page.id;
+	msg.value = '';
+	try {
+		const res = await fetch(page.imageUrl);
+		if (!res.ok) throw new Error('原图加载失败');
+		const blob = await res.blob();
+		const rotated = await rotateImageBlob(blob, deg);
+		const form = new FormData();
+		form.append('image', new File([rotated], `${page.pageNo}.jpg`, { type: 'image/jpeg' }));
+		const { imageUrl } = await api<{ pageId: number; imageUrl: string }>(`/api/admin/pages/${page.id}/image`, {
+			method: 'POST',
+			body: form,
+		});
+		page.imageUrl = imageUrl;
+		page.ocrStatus = 'pending';
+		page.content = { lines: [] };
+		pendingSince[page.id] = Date.now();
+		rotatePreview[page.id] = 0;
+		syncPolling();
+	} catch (e) {
+		msg.value = e instanceof ApiError ? e.message : '旋转失败，请重试';
+	} finally {
+		rotating.value = null;
+	}
+}
 </script>
 
 <template>
@@ -201,7 +242,37 @@ async function reOcr(page: ArticlePage) {
 				</button>
 			</header>
 
-			<img v-if="showImage[page.id]" :src="page.imageUrl" class="original" alt="原书页面" />
+			<template v-if="showImage[page.id]">
+				<img
+					:src="page.imageUrl"
+					class="original"
+					:style="{ transform: `rotate(${rotatePreview[page.id] ?? 0}deg)` }"
+					alt="原书页面"
+				/>
+				<div class="rotate-bar">
+					<button type="button" class="btn ghost small" :disabled="rotating === page.id" @click="cycleRotatePreview(page.id)">
+						↻ 旋转预览
+					</button>
+					<button
+						v-if="rotatePreview[page.id]"
+						type="button"
+						class="btn small"
+						:disabled="rotating === page.id"
+						@click="applyRotation(page)"
+					>
+						{{ rotating === page.id ? '保存中…' : '保存旋转并重新识别' }}
+					</button>
+					<button
+						v-if="rotatePreview[page.id]"
+						type="button"
+						class="btn ghost small"
+						:disabled="rotating === page.id"
+						@click="rotatePreview[page.id] = 0"
+					>
+						撤销预览
+					</button>
+				</div>
+			</template>
 
 			<p v-if="page.ocrStatus === 'pending' && !isStuck(page)" class="hint">识别中，请稍候…（约 10~30 秒）</p>
 			<p v-else-if="page.ocrStatus === 'pending' && isStuck(page)" class="hint fail">
@@ -294,6 +365,13 @@ async function reOcr(page: ArticlePage) {
 	width: 100%;
 	border-radius: 10px;
 	margin: 8px 0;
+	transition: transform 0.15s ease;
+}
+.rotate-bar {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+	margin-bottom: 8px;
 }
 .linebox {
 	border-top: 1px dashed #eadfca;

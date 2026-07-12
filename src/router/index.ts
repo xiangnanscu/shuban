@@ -8,6 +8,7 @@ const router = createRouter({
 	routes: [
 		{ path: '/', name: 'home', component: Home },
 		{ path: '/read/:id', name: 'read', component: Read },
+		{ path: '/quiz', name: 'quiz', component: () => import('@/views/Quiz.vue') },
 		{ path: '/admin/login', name: 'admin-login', component: () => import('@/views/admin/Login.vue') },
 		{ path: '/admin', name: 'admin', component: () => import('@/views/admin/Manage.vue'), meta: { admin: true } },
 		{
@@ -20,6 +21,12 @@ const router = createRouter({
 			path: '/admin/proofread/:id',
 			name: 'admin-proofread',
 			component: () => import('@/views/admin/Proofread.vue'),
+			meta: { admin: true },
+		},
+		{
+			path: '/admin/pool',
+			name: 'admin-pool',
+			component: () => import('@/views/admin/Pool.vue'),
 			meta: { admin: true },
 		},
 	],

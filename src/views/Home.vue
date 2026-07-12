@@ -1,17 +1,23 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { api } from '@/composables/useApi';
-import type { ArticleSummary } from '@/types';
+import type { ArticleSummary, DueItem } from '@/types';
 
 const articles = ref<ArticleSummary[]>([]);
 const poolCount = ref(0);
+const dueCount = ref(0);
 const loading = ref(true);
 
 onMounted(async () => {
 	try {
-		const [list, pool] = await Promise.all([api<ArticleSummary[]>('/api/articles'), api<string[]>('/api/pool')]);
+		const [list, pool, due] = await Promise.all([
+			api<ArticleSummary[]>('/api/articles'),
+			api<string[]>('/api/pool'),
+			api<DueItem[]>('/api/review/due'),
+		]);
 		articles.value = list.filter((a) => a.status === 'published');
 		poolCount.value = pool.length;
+		dueCount.value = due.length;
 	} finally {
 		loading.value = false;
 	}
@@ -22,7 +28,8 @@ onMounted(async () => {
 	<div class="page">
 		<header class="top">
 			<h1>书伴</h1>
-			<span v-if="poolCount > 0" class="badge">生字池 {{ poolCount }} 字</span>
+			<RouterLink v-if="dueCount > 0" to="/quiz" class="badge due">今日复习 {{ dueCount }} 字 ›</RouterLink>
+			<span v-else-if="poolCount > 0" class="badge quiet">生字池 {{ poolCount }} 字</span>
 		</header>
 
 		<p v-if="loading" class="hint">加载中…</p>
@@ -44,6 +51,8 @@ onMounted(async () => {
 		</div>
 
 		<footer class="foot">
+			<RouterLink to="/quiz" class="small">复习测验</RouterLink>
+			·
 			<RouterLink to="/admin" class="small">家长区</RouterLink>
 		</footer>
 	</div>
@@ -72,6 +81,14 @@ h1 {
 	border-radius: 999px;
 	padding: 4px 12px;
 	font-size: 14px;
+}
+.badge.due {
+	text-decoration: none;
+	font-weight: 600;
+}
+.badge.quiet {
+	background: #e8ddc6;
+	color: #8a6d3b;
 }
 .grid {
 	display: grid;

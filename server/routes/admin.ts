@@ -108,6 +108,39 @@ export const adminRoutes = new Hono<AppEnv>()
 		return c.json(ok({ id }));
 	})
 
+	// 生字池全量列表（含毕业字），家长管理页用
+	.get('/review', async (c) => {
+		const { results } = await c.env.DB.prepare(
+			`SELECT r.ch, COALESCE(c.pinyin, '') AS pinyin, r.box, r.due_at, r.graduated,
+			        r.correct_count, r.wrong_count, COALESCE(c.total_taps, 0) AS total_taps
+			 FROM review_items r LEFT JOIN chars c ON c.ch = r.ch
+			 ORDER BY r.graduated, r.due_at`,
+		).all<{
+			ch: string;
+			pinyin: string;
+			box: number;
+			due_at: string;
+			graduated: number;
+			correct_count: number;
+			wrong_count: number;
+			total_taps: number;
+		}>();
+		return c.json(
+			ok(
+				results.map((r) => ({
+					ch: r.ch,
+					pinyin: r.pinyin,
+					box: r.box,
+					dueAt: r.due_at,
+					graduated: r.graduated === 1,
+					correctCount: r.correct_count,
+					wrongCount: r.wrong_count,
+					totalTaps: r.total_taps,
+				})),
+			),
+		);
+	})
+
 	// 生字池清理（误点）
 	.delete('/review/:ch', async (c) => {
 		const ch = c.req.param('ch');

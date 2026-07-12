@@ -137,10 +137,10 @@ h1 {
 	padding: 1px 7px;
 	font-size: 12px;
 }
-.rm,
-.rotate {
+.rm {
 	position: absolute;
 	top: 4px;
+	right: 4px;
 	border: 0;
 	background: rgba(0, 0, 0, 0.55);
 	color: #fff;
@@ -149,12 +149,20 @@ h1 {
 	height: 24px;
 	cursor: pointer;
 }
-.rm {
-	right: 4px;
-}
 .rotate {
-	right: 32px;
-	font-size: 15px;
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	border: 0;
+	background: rgba(0, 0, 0, 0.55);
+	color: #fff;
+	border-radius: 50%;
+	width: 44px;
+	height: 44px;
+	font-size: 24px;
+	line-height: 1;
+	cursor: pointer;
 }
 .err {
 	color: var(--danger);

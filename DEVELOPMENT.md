@@ -508,6 +508,8 @@ return JSON.parse(text) as PageContent;
 
 `OCR_PROVIDER` 是逗号分隔的优先级链，默认 `"gemini,workersai,claude"`：按序尝试，构造期缺 key 的引擎跳过（告警日志），识别失败自动降级到下一个；全部失败该页才标 `failed`。
 
+`OCR_TIMEOUT_MS`（默认 `30000`，即 30s）是单个 provider 一次识别尝试的硬超时：用 `AbortController` + `Promise.race` 兜底，即使底层请求（网络挂起、上游长时间不响应等）永不返回，也保证超时后判定该 provider 失败并降级到下一个，避免 `ocr_status` 永久卡在 `pending`。需要更宽松/更严格的超时时可在 `wrangler.jsonc` 的 `vars` 里调整。
+
 **① Gemini（默认首选）——`gemini-flash-latest`**
 
 - Google Generative Language REST API `models/{model}:generateContent`，`x-goog-api-key` 头；key 走 secret `GEMINI_API_KEY`。
@@ -672,7 +674,8 @@ getUserMedia({ audio: { echoCancellation:false, noiseSuppression:true } })
     "OCR_PROVIDER": "gemini,workersai,claude",
     "GEMINI_MODEL": "gemini-flash-latest",
     "WORKERSAI_MODEL": "@cf/moonshotai/kimi-k2.6",
-    "CLAUDE_MODEL": "claude-opus-4-8"
+    "CLAUDE_MODEL": "claude-opus-4-8",
+    "OCR_TIMEOUT_MS": "30000"
   },
   "observability": { "enabled": true }
 }

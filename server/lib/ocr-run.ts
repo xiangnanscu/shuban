@@ -9,22 +9,29 @@ interface PageRow {
 	image_key: string;
 }
 
-/** 单个 provider 尝试的硬上限：即使底层请求（网络挂起等）永不返回，也保证在此时限内失败并进入下一个 provider */
-const PROVIDER_TIMEOUT_MS = 30_000;
+/** 单个 provider 尝试超时的默认值（毫秒）；可通过 OCR_TIMEOUT_MS 环境变量覆盖 */
+const DEFAULT_PROVIDER_TIMEOUT_MS = 30_000;
 
+function getProviderTimeoutMs(env: Bindings): number {
+	const n = Number(env.OCR_TIMEOUT_MS);
+	return Number.isFinite(n) && n > 0 ? n : DEFAULT_PROVIDER_TIMEOUT_MS;
+}
+
+/** 即使底层请求（网络挂起等）永不返回，也保证在超时时限内失败并进入下一个 provider */
 async function recognizeWithTimeout(
 	provider: OcrProvider,
 	image: ArrayBuffer,
 	isFirstPage: boolean,
+	timeoutMs: number,
 ): Promise<PageContent> {
 	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
+	const timer = setTimeout(() => controller.abort(), timeoutMs);
 	try {
 		return await Promise.race([
 			provider.recognize(image, { isFirstPage, signal: controller.signal }),
 			new Promise<never>((_, reject) => {
 				controller.signal.addEventListener('abort', () =>
-					reject(new Error(`超时（${PROVIDER_TIMEOUT_MS / 1000}s 未响应）`)),
+					reject(new Error(`超时（${timeoutMs / 1000}s 未响应）`)),
 				);
 			}),
 		]);
@@ -48,11 +55,12 @@ export async function runOcrForPage(env: Bindings, pageId: number): Promise<void
 		const providers = getOcrProviders(env);
 		if (providers.length === 0) throw new Error('没有任何可用的 OCR provider（检查 OCR_PROVIDER 与各家 key）');
 
+		const timeoutMs = getProviderTimeoutMs(env);
 		let content = null;
 		const errors: string[] = [];
 		for (const { name, provider } of providers) {
 			try {
-				content = await recognizeWithTimeout(provider, image, page.page_no === 1);
+				content = await recognizeWithTimeout(provider, image, page.page_no === 1, timeoutMs);
 				console.log(`OCR page ${pageId} done via "${name}"`);
 				break;
 			} catch (e) {

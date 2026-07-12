@@ -232,13 +232,8 @@ async function applyRotation(page: ArticlePage) {
 				<button type="button" class="btn ghost small" @click="showImage[page.id] = !showImage[page.id]">
 					{{ showImage[page.id] ? '收起原图' : '对照原图' }}
 				</button>
-				<button
-					v-if="page.ocrStatus !== 'pending' || isStuck(page)"
-					type="button"
-					class="btn ghost small"
-					@click="reOcr(page)"
-				>
-					{{ isStuck(page) ? '卡住了？重新识别' : '重新识别' }}
+				<button type="button" class="btn ghost small" @click="reOcr(page)">
+					{{ page.ocrStatus === 'pending' ? '取消并重新识别' : '重新识别' }}
 				</button>
 			</header>
 

@@ -724,7 +724,12 @@ npm run build && npx wrangler deploy                     # 上线，得到 https
 - **M1 验证项**：MeloTTS `lang:'zh'` 实测（决定 §8.3 兜底方案走向）
 - 验收：US-1/2/3 全流程真机跑通（iOS Safari + Android Chrome）
 
-### M2 复习与测验
+### M2 复习与测验 —— ✅ 已完成（2026-07-12）
+
+> 实施记录：Leitner 纯函数 `server/lib/leitner.ts`（vitest 覆盖，`npm test`）；干扰项生成 `server/lib/quiz-gen.ts` + 内置约 300 字常用字表 `server/lib/common-chars.ts`（拼音工具 `server/lib/pinyin.ts`）。
+> API 新增：`GET /api/review/due`、`GET /api/quiz/next`（`?practice=1` 从全池随机抽，供毕业字手动抽查）、`POST /api/quiz/answer`（`practice: true` 只记流水不动 Leitner——轮末错题重测用）、`GET /api/admin/review`（生字池全量列表）。
+> 前端新增：`/quiz` 测验页（每轮 ≤10 题、三模式混合、错题轮末重测、连错 3 题温和收场）、`/admin/pool` 生字池管理页、首页"今日复习 N 字"角标。
+> 与文档的偏差：单测配置用独立 `vitest.config.ts`（`vite.config.ts` 里的 @cloudflare/vite-plugin 需要远程凭据，纯函数单测不必拉起）。
 
 - Leitner 调度、到期查询、首页角标
 - 三模式测验 + 干扰项生成 + 内置常用字表

@@ -229,7 +229,8 @@ CREATE TABLE pages (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   article_id   INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
   page_no      INTEGER NOT NULL,
-  image_key    TEXT NOT NULL,                         -- R2 key
+  image_key      TEXT NOT NULL,                       -- R2 key
+  image_version  INTEGER NOT NULL DEFAULT 1,           -- 替换/旋转原图后自增，用于给 /api/files 的 immutable 缓存加 ?v= 破缓存
   ocr_status   TEXT NOT NULL DEFAULT 'pending' CHECK (ocr_status IN ('pending','done','failed')),
   content_json TEXT NOT NULL DEFAULT '{"lines":[]}',
   UNIQUE (article_id, page_no)
@@ -358,6 +359,7 @@ Base：同域 `/api`。响应统一 `{ ok: true, data }` 或 `{ ok: false, error
 | POST | `/api/auth/logout` | 清 cookie |
 | POST | `/api/admin/articles` | multipart：`images[]`（已压缩 JPEG）→ 建 draft 文章 + pages（存 R2）→ **逐页异步触发 OCR** → 返回 `{articleId}`；前端轮询 `GET /api/articles/:id` 看 `ocr_status` |
 | POST | `/api/admin/pages/:id/ocr` | 重跑单页 OCR；`?hires=1` 用原图重跑 |
+| POST | `/api/admin/pages/:id/image` | multipart：`image`（替换原图，如校对时修正拍歪/拍倒）→ 覆盖 R2 对象、`image_version+1`、`ocr_status='pending'` 并自动重新识别 |
 | PUT | `/api/admin/articles/:id` | 更新 `title` / `status` / 各页 `content_json`（校对保存） |
 | DELETE | `/api/admin/articles/:id` | 级联删 pages + R2 图片 |
 | DELETE | `/api/admin/recordings/:id` | 删录音 |
@@ -507,6 +509,8 @@ return JSON.parse(text) as PageContent;
 ### 7.6 引擎链（2026-07-11 实现，取代单引擎切换）
 
 `OCR_PROVIDER` 是逗号分隔的优先级链，默认 `"gemini,workersai,claude"`：按序尝试，构造期缺 key 的引擎跳过（告警日志），识别失败自动降级到下一个；全部失败该页才标 `failed`。
+
+`OCR_TIMEOUT_MS`（默认 `30000`，即 30s）是单个 provider 一次识别尝试的硬超时：用 `AbortController` + `Promise.race` 兜底，即使底层请求（网络挂起、上游长时间不响应等）永不返回，也保证超时后判定该 provider 失败并降级到下一个，避免 `ocr_status` 永久卡在 `pending`。需要更宽松/更严格的超时时可在 `wrangler.jsonc` 的 `vars` 里调整。
 
 **① Gemini（默认首选）——`gemini-flash-latest`**
 
@@ -672,7 +676,8 @@ getUserMedia({ audio: { echoCancellation:false, noiseSuppression:true } })
     "OCR_PROVIDER": "gemini,workersai,claude",
     "GEMINI_MODEL": "gemini-flash-latest",
     "WORKERSAI_MODEL": "@cf/moonshotai/kimi-k2.6",
-    "CLAUDE_MODEL": "claude-opus-4-8"
+    "CLAUDE_MODEL": "claude-opus-4-8",
+    "OCR_TIMEOUT_MS": "30000"
   },
   "observability": { "enabled": true }
 }

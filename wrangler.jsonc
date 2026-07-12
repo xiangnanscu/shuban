@@ -33,6 +33,7 @@
 		"OCR_PROVIDER": "gemini,workersai,claude",
 		"GEMINI_MODEL": "gemini-flash-latest",
 		"WORKERSAI_MODEL": "@cf/moonshotai/kimi-k2.6",
-		"CLAUDE_MODEL": "claude-opus-4-8"
+		"CLAUDE_MODEL": "claude-opus-4-8",
+		"OCR_TIMEOUT_MS": "30000"
 	}
 }

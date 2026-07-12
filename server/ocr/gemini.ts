@@ -46,12 +46,13 @@ export function geminiProvider(apiKey: string, model: string): OcrProvider {
 	if (!apiKey) throw new Error('缺少 GEMINI_API_KEY（wrangler secret / .dev.vars）');
 
 	return {
-		async recognize(image, { isFirstPage }) {
+		async recognize(image, { isFirstPage, signal }) {
 			const res = await fetch(
 				`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
 				{
 					method: 'POST',
 					headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+					signal,
 					body: JSON.stringify({
 						systemInstruction: { parts: [{ text: OCR_SYSTEM_PROMPT }] },
 						contents: [

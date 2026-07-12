@@ -9,6 +9,7 @@ interface __BaseEnv_Env {
 	GEMINI_MODEL: "gemini-flash-latest";
 	WORKERSAI_MODEL: "@cf/moonshotai/kimi-k2.6";
 	CLAUDE_MODEL: "claude-opus-4-8";
+	OCR_TIMEOUT_MS: "30000";
 	SESSION_SECRET: string;
 	GEMINI_API_KEY: string;
 	ANTHROPIC_API_KEY: string;
@@ -24,7 +25,7 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "OCR_PROVIDER" | "GEMINI_MODEL" | "WORKERSAI_MODEL" | "CLAUDE_MODEL" | "SESSION_SECRET" | "GEMINI_API_KEY" | "ANTHROPIC_API_KEY">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "OCR_PROVIDER" | "GEMINI_MODEL" | "WORKERSAI_MODEL" | "CLAUDE_MODEL" | "OCR_TIMEOUT_MS" | "SESSION_SECRET" | "GEMINI_API_KEY" | "ANTHROPIC_API_KEY">> {}
 }
 
 // Begin runtime types

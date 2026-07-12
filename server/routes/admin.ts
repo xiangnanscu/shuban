@@ -51,6 +51,30 @@ export const adminRoutes = new Hono<AppEnv>()
 		return c.json(ok({ articleId }));
 	})
 
+	// 单页替换原图（校对时修正拍歪/拍倒），替换后自动重新识别
+	.post('/pages/:id/image', async (c) => {
+		const pageId = Number(c.req.param('id'));
+		if (!Number.isInteger(pageId)) return c.json(err('bad_id', '无效 id'), 400);
+		const row = await c.env.DB.prepare('SELECT image_key, image_version FROM pages WHERE id = ?1')
+			.bind(pageId)
+			.first<{ image_key: string; image_version: number }>();
+		if (!row) return c.json(err('not_found', '页不存在'), 404);
+
+		const form = await c.req.raw.formData();
+		const file = form.get('image');
+		if (!(file instanceof File)) return c.json(err('no_image', '未收到图片'), 400);
+		if (!IMAGE_TYPES.has(file.type)) return c.json(err('bad_type', `不支持的图片类型 ${file.type}`), 400);
+		if (file.size > MAX_IMAGE_BYTES) return c.json(err('too_large', '图片需 ≤8MB'), 400);
+
+		await c.env.BUCKET.put(row.image_key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
+		const imageVersion = row.image_version + 1;
+		await c.env.DB.prepare("UPDATE pages SET image_version = ?1, ocr_status = 'pending' WHERE id = ?2")
+			.bind(imageVersion, pageId)
+			.run();
+		c.executionCtx.waitUntil(runOcrForPage(c.env, pageId));
+		return c.json(ok({ pageId, imageUrl: `/api/files/${row.image_key}?v=${imageVersion}` }));
+	})
+
 	// 单页重跑 OCR
 	.post('/pages/:id/ocr', async (c) => {
 		const pageId = Number(c.req.param('id'));

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// 复习测验（US-5）：每轮 ≤10 题，三模式混合出题；对→升盒，错→归零；
-// 错题轮末重测一次（practice，不再动 Leitner）；连错 3 题温和收场。
+// 复习测验（US-5）：每轮 ≤10 题，全部为听音选字（田字格四选一，孩子独立完成）；
+// 对→升盒，错→归零；错题轮末重测一次（practice，不再动 Leitner）；连错 3 题温和收场。
 import { onMounted, ref } from 'vue';
 import { api } from '@/composables/useApi';
 import { speak } from '@/composables/useTts';
@@ -52,10 +52,6 @@ function start(practice = false) {
 	void nextQuestion();
 }
 
-function correctAnswerOf(q: QuizQuestion): string {
-	return q.mode === 'listen_pick' ? q.ch : q.pinyin;
-}
-
 async function nextQuestion() {
 	selected.value = null;
 	answered.value = false;
@@ -66,7 +62,7 @@ async function nextQuestion() {
 		const q = wrongQuestions.shift();
 		if (!q) return finish();
 		question.value = q;
-		if (q.mode === 'listen_pick') speak(q.ch);
+		speak(q.ch);
 		return;
 	}
 	if (askedCount.value >= MAX_QUESTIONS) return startRetest();
@@ -77,7 +73,7 @@ async function nextQuestion() {
 		);
 		if (r.done || !r.question) return startRetest();
 		question.value = r.question;
-		if (r.question.mode === 'listen_pick') speak(r.question.ch);
+		speak(r.question.ch);
 	} catch {
 		startRetest();
 	}
@@ -93,10 +89,10 @@ function finish() {
 	phase.value = 'done';
 }
 
-function answer(choice: string | null, known?: boolean) {
+function answer(choice: string) {
 	const q = question.value;
 	if (!q || answered.value) return;
-	const correct = q.mode === 'read_aloud' ? known === true : choice === correctAnswerOf(q);
+	const correct = choice === q.ch;
 	selected.value = choice;
 	answered.value = true;
 	lastCorrect.value = correct;
@@ -109,8 +105,8 @@ function answer(choice: string | null, known?: boolean) {
 	}
 
 	if (correct) playDing();
-	// 答错显示正确答案并发音；读字题无论对错都播一遍巩固
-	if (!correct || q.mode === 'read_aloud') speak(q.ch);
+	// 答错高亮正确答案并再播一遍发音巩固
+	if (!correct) speak(q.ch);
 
 	// 重测与练习模式只记流水，不动 Leitner
 	void api('/api/quiz/answer', {
@@ -136,7 +132,7 @@ function answer(choice: string | null, known?: boolean) {
 function optionClass(opt: string): string {
 	const q = question.value;
 	if (!q || !answered.value) return '';
-	if (opt === correctAnswerOf(q)) return 'right';
+	if (opt === q.ch) return 'right';
 	if (opt === selected.value) return 'wrong';
 	return 'dim';
 }
@@ -196,58 +192,25 @@ function playDing() {
 			<button type="button" class="btn ghost" @click="start(true)">随便练练（不计成绩）</button>
 		</div>
 
-		<!-- 答题 -->
+		<!-- 答题：听发音，田字格四选一 -->
 		<div v-else-if="phase === 'question'" class="quiz">
 			<p v-if="!question" class="hint center">出题中…</p>
 			<template v-else>
-				<!-- 听音选字 -->
-				<template v-if="question.mode === 'listen_pick'">
-					<button type="button" class="speaker" @click="speak(question.ch)">🔊</button>
-					<p class="ask">听发音，选出正确的字</p>
-					<div class="options">
-						<button
-							v-for="opt in question.options"
-							:key="opt"
-							type="button"
-							class="opt char"
-							:class="optionClass(opt)"
-							:disabled="answered"
-							@click="answer(opt)"
-						>
-							{{ opt }}
-						</button>
-					</div>
-				</template>
-
-				<!-- 看字选拼音 -->
-				<template v-else-if="question.mode === 'pick_pinyin'">
-					<div class="big-char">{{ question.ch }}</div>
-					<p class="ask">这个字读什么？</p>
-					<div class="options">
-						<button
-							v-for="opt in question.options"
-							:key="opt"
-							type="button"
-							class="opt pinyin"
-							:class="optionClass(opt)"
-							:disabled="answered"
-							@click="answer(opt)"
-						>
-							{{ opt }}
-						</button>
-					</div>
-				</template>
-
-				<!-- 看字读音（家长判分） -->
-				<template v-else>
-					<div class="big-char">{{ question.ch }}</div>
-					<p v-if="answered" class="reveal">{{ question.pinyin }}</p>
-					<p class="ask">请孩子读出这个字，家长判断</p>
-					<div class="options two">
-						<button type="button" class="opt yes" :disabled="answered" @click="answer(null, true)">认识 😊</button>
-						<button type="button" class="opt no" :disabled="answered" @click="answer(null, false)">还不认识</button>
-					</div>
-				</template>
+				<button type="button" class="speaker" @click="speak(question.ch)">🔊</button>
+				<p class="ask">听发音，选出正确的字</p>
+				<div class="options">
+					<button
+						v-for="opt in question.options"
+						:key="opt"
+						type="button"
+						class="opt char"
+						:class="optionClass(opt)"
+						:disabled="answered"
+						@click="answer(opt)"
+					>
+						<span class="glyph">{{ opt }}</span>
+					</button>
+				</div>
 
 				<p v-if="answered" class="feedback" :class="lastCorrect ? 'good' : 'bad'">
 					{{ lastCorrect ? '答对啦！' : `正确答案：${question.ch} ${question.pinyin}` }}
@@ -326,16 +289,6 @@ h1 {
 .speaker:active {
 	background: #ffe9d6;
 }
-.big-char {
-	font-size: clamp(96px, 28vw, 160px);
-	line-height: 1.2;
-	font-weight: 600;
-}
-.reveal {
-	font-size: 28px;
-	color: var(--pinyin);
-	margin: 0;
-}
 .ask {
 	color: #9a8a70;
 	font-size: 16px;
@@ -345,34 +298,43 @@ h1 {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 14px;
-	max-width: 420px;
+	max-width: 380px;
 	margin: 0 auto;
 }
-.options.two {
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.opt {
-	min-height: 76px;
-	border: 2px solid #e2d5bc;
-	border-radius: 16px;
+/* 田字格：正方形格子 + 虚线十字辅助线 */
+.opt.char {
+	position: relative;
+	aspect-ratio: 1;
+	border: 3px solid #e0b98c;
+	border-radius: 12px;
 	background: #fff;
 	cursor: pointer;
 	color: var(--ink);
+	font-size: clamp(56px, 18vw, 96px);
+	line-height: 1;
+	font-family: 'Kaiti SC', 'STKaiti', KaiTi, serif;
 }
-.opt.char {
-	font-size: 44px;
+.opt.char::before,
+.opt.char::after {
+	content: '';
+	position: absolute;
+	pointer-events: none;
 }
-.opt.pinyin {
-	font-size: 26px;
-	color: var(--pinyin);
+.opt.char::before {
+	left: 5%;
+	right: 5%;
+	top: 50%;
+	border-top: 2px dashed #f0d9bd;
 }
-.opt.yes {
-	font-size: 22px;
-	border-color: #8bbd7d;
+.opt.char::after {
+	top: 5%;
+	bottom: 5%;
+	left: 50%;
+	border-left: 2px dashed #f0d9bd;
 }
-.opt.no {
-	font-size: 20px;
-	color: #9a8a70;
+.opt.char .glyph {
+	position: relative;
+	z-index: 1;
 }
 .opt:disabled {
 	cursor: default;

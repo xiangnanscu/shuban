@@ -1,10 +1,11 @@
-// 测验出题（纯函数，便于单测）：模式抽取 + 干扰项生成，规则见 DEVELOPMENT.md §9.2/§9.3。
+// 测验出题（纯函数，便于单测）：干扰项生成规则见 DEVELOPMENT.md §9.2/§9.3。
+// 唯一模式为听音选字（孩子独立完成，无需家长判分）。
 
 import { COMMON_CHARS } from './common-chars';
 import { finalOf, initialOf } from './pinyin';
 
-export type QuizMode = 'listen_pick' | 'pick_pinyin' | 'read_aloud';
-export const QUIZ_MODES: readonly QuizMode[] = ['listen_pick', 'pick_pinyin', 'read_aloud'];
+export type QuizMode = 'listen_pick';
+export const QUIZ_MODES: readonly QuizMode[] = ['listen_pick'];
 
 export interface QuizChar {
 	ch: string;
@@ -15,16 +16,8 @@ export interface QuizQuestion {
 	mode: QuizMode;
 	ch: string;
 	pinyin: string;
-	/** listen_pick：4 个汉字；pick_pinyin：4 个拼音；read_aloud：空数组 */
+	/** 4 个汉字选项（含目标字），前端以田字格展示 */
 	options: string[];
-}
-
-/** 默认混合比例：听音选字 60% / 看字选拼音 20% / 看字读音 20% */
-export function pickMode(rand: () => number = Math.random): QuizMode {
-	const r = rand();
-	if (r < 0.6) return 'listen_pick';
-	if (r < 0.8) return 'pick_pinyin';
-	return 'read_aloud';
 }
 
 const OPTION_COUNT = 4;
@@ -59,21 +52,13 @@ export function buildDistractors(target: QuizChar, pool: QuizChar[], rand: () =>
 	return chosen;
 }
 
-export function buildQuestion(
-	target: QuizChar,
-	pool: QuizChar[],
-	mode: QuizMode,
-	rand: () => number = Math.random,
-): QuizQuestion {
-	if (mode === 'read_aloud') {
-		return { mode, ch: target.ch, pinyin: target.pinyin, options: [] };
-	}
+export function buildQuestion(target: QuizChar, pool: QuizChar[], rand: () => number = Math.random): QuizQuestion {
 	const all = shuffle([target, ...buildDistractors(target, pool, rand)], rand);
 	return {
-		mode,
+		mode: 'listen_pick',
 		ch: target.ch,
 		pinyin: target.pinyin,
-		options: all.map((c) => (mode === 'listen_pick' ? c.ch : c.pinyin)),
+		options: all.map((c) => c.ch),
 	};
 }
 

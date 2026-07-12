@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { COMMON_CHARS } from '../server/lib/common-chars';
-import { buildDistractors, buildQuestion, pickMode, type QuizChar } from '../server/lib/quiz-gen';
+import { buildDistractors, buildQuestion, type QuizChar } from '../server/lib/quiz-gen';
 
 const HAN = /^\p{Script=Han}$/u;
 const PINYIN = /^[a-zümḿń̀áǎàēéěèêīíǐìōóǒòūúǔùǖǘǚǜāńňǹ]+$/u;
@@ -16,15 +16,6 @@ describe('COMMON_CHARS 表完整性', () => {
 			expect(seen.has(ch), `重复字「${ch}」`).toBe(false);
 			seen.add(ch);
 		}
-	});
-});
-
-describe('pickMode', () => {
-	it('按 60/20/20 分段', () => {
-		expect(pickMode(() => 0.1)).toBe('listen_pick');
-		expect(pickMode(() => 0.59)).toBe('listen_pick');
-		expect(pickMode(() => 0.7)).toBe('pick_pinyin');
-		expect(pickMode(() => 0.9)).toBe('read_aloud');
 	});
 });
 
@@ -70,24 +61,12 @@ describe('buildDistractors', () => {
 describe('buildQuestion', () => {
 	const target: QuizChar = { ch: '马', pinyin: 'mǎ' };
 
-	it('listen_pick：4 个汉字选项，含目标字', () => {
-		const q = buildQuestion(target, [], 'listen_pick');
+	it('4 个汉字选项，含目标字且互不相同', () => {
+		const q = buildQuestion(target, []);
+		expect(q.mode).toBe('listen_pick');
 		expect(q.options).toHaveLength(4);
 		expect(q.options).toContain('马');
 		expect(new Set(q.options).size).toBe(4);
-	});
-
-	it('pick_pinyin：4 个拼音选项，含正确拼音且互不相同', () => {
-		const q = buildQuestion(target, [], 'pick_pinyin');
-		expect(q.options).toHaveLength(4);
-		expect(q.options).toContain('mǎ');
-		expect(new Set(q.options).size).toBe(4);
-	});
-
-	it('read_aloud：无选项', () => {
-		const q = buildQuestion(target, [], 'read_aloud');
-		expect(q.options).toEqual([]);
-		expect(q.ch).toBe('马');
 		expect(q.pinyin).toBe('mǎ');
 	});
 });

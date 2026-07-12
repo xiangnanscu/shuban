@@ -57,7 +57,7 @@
 **US-2 读文章**：孩子打开首页，看到大图卡片列表，点开今天要读的文章。屏幕上文字排版与纸书一致，每个汉字上方有拼音（可切换隐藏）。
 **US-3 点字发音**：孩子读到不认识的"藏"字，用手指点它——立即发音"cáng"，该字轻微高亮动画。后台记录一次点击，"藏"进入生字池。
 **US-4 录音**：孩子点"开始朗读"，读完整篇后点"完成"。系统生成 MP3，可直接保存到手机/电脑，也自动存档，供日后回放对比。
-**US-5 复习**：第二天孩子打开首页，看到"今日复习 5 个字"角标。进入测验：听发音选汉字（自动判分）、看字读音（家长点"认识/不认识"）。答对的字复习间隔拉长，答错的重新开始。
+**US-5 复习**：第二天孩子打开首页，看到"今日复习 5 个字"角标。进入测验：系统念出目标字，田字格显示 4 个汉字，孩子点选（自动判分，全程无需家长）。答对的字复习间隔拉长，答错的重新开始。
 **US-6 看报告**：家长在 `/stats` 查看连续打卡天数、生字池曲线、每个字的点击/答题历史，可打印生字表。
 
 ---
@@ -115,7 +115,7 @@
 ### F7 复习与测验
 
 - 首页角标显示今日到期字数（按 Asia/Shanghai 的"今天"）。
-- 测验三模式（详见 §9）：听音选字（自动判分）、看字读音（家长判分）、看字选拼音（自动判分）。
+- 测验单一模式（详见 §9.2）：听音选字——系统发音，田字格四选一，自动判分，孩子独立完成。
 - 每轮默认 ≤10 字；答题即时反馈（对：绿色+音效；错：显示正确答案并发音）。
 - Leitner 盒调度：对→升级拉长间隔，错→归零。
 - **AC**：昨天点过的字今天出现在到期列表；连对六次后该字标记"毕业"，不再默认出现（仍可手动抽查）。
@@ -340,7 +340,7 @@ Base：同域 `/api`。响应统一 `{ ok: true, data }` 或 `{ ok: false, error
 | GET | `/api/files/:key` | R2 文件代理（图片/录音/TTS 缓存），带 `Cache-Control` |
 | POST | `/api/taps` | `{ch, articleId}` → 记流水、`chars` upsert、首次点击建 `review_items(box=0, due=今晚)` |
 | GET | `/api/review/due` | 今日到期字：`[{ch, pinyin, box}]`（`graduated=0 AND due_at<=now`） |
-| GET | `/api/quiz/next?mode=listen_pick` | 服务端出一题（含干扰项，见 §9.3） |
+| GET | `/api/quiz/next` | 服务端出一题（听音选字，含干扰项，见 §9.3） |
 | POST | `/api/quiz/answer` | `{ch, mode, correct}` → 记流水 + Leitner 升降级 |
 | POST | `/api/sessions/start` | `{articleId}` → `{sessionId}` |
 | POST | `/api/sessions/end` | `{sessionId}` |
@@ -614,15 +614,15 @@ getUserMedia({ audio: { echoCancellation:false, noiseSuppression:true } })
 - **答错**：`box = 0`，`due_at = now + 10 分钟`（本轮内可再来一次）。
 - 到期查询：`WHERE graduated=0 AND due_at <= now ORDER BY due_at LIMIT 10`。
 
-### 9.2 三种测验模式
+### 9.2 测验模式（单一模式：听音选字）
 
 | 模式 | 题面 | 判分 | 说明 |
 |---|---|---|---|
-| `listen_pick` 听音选字 | 播放发音，四选一选汉字 | 自动 | 主力模式，孩子可独立完成 |
-| `pick_pinyin` 看字选拼音 | 大字展示，四选一选拼音 | 自动 | 检验注音记忆 |
-| `read_aloud` 看字读音 | 大字展示，孩子读出，显示"认识 / 不认识"两键 | 家长/自评 | 最接近真实识字，穿插出现 |
+| `listen_pick` 听音选字 | 播放发音，田字格展示 4 个汉字，四选一 | 自动 | 唯一模式，孩子独立完成，无需家长判断 |
 
-每轮混合出题（默认 listen_pick 60% / pick_pinyin 20% / read_aloud 20%，家长可在设置调整或关闭 read_aloud）。
+> 2026-07-12 调整：原三模式（listen_pick / pick_pinyin / read_aloud 按 60/20/20 混合）中，
+> read_aloud 依赖家长判分、pick_pinyin 偏离"识字"目标，均已移除。参考"识趣识字"交互：
+> 系统念出目标字，孩子在田字格中点选。`quiz_answers.mode` 的 CHECK 约束保留旧值以兼容历史流水。
 
 ### 9.3 干扰项生成（服务端 `GET /api/quiz/next`）
 
@@ -739,11 +739,12 @@ npm run build && npx wrangler deploy                     # 上线，得到 https
 
 > 实施记录：Leitner 纯函数 `server/lib/leitner.ts`（vitest 覆盖，`npm test`）；干扰项生成 `server/lib/quiz-gen.ts` + 内置约 300 字常用字表 `server/lib/common-chars.ts`（拼音工具 `server/lib/pinyin.ts`）。
 > API 新增：`GET /api/review/due`、`GET /api/quiz/next`（`?practice=1` 从全池随机抽，供毕业字手动抽查）、`POST /api/quiz/answer`（`practice: true` 只记流水不动 Leitner——轮末错题重测用）、`GET /api/admin/review`（生字池全量列表）。
-> 前端新增：`/quiz` 测验页（每轮 ≤10 题、三模式混合、错题轮末重测、连错 3 题温和收场）、`/admin/pool` 生字池管理页、首页"今日复习 N 字"角标。
+> 前端新增：`/quiz` 测验页（每轮 ≤10 题、错题轮末重测、连错 3 题温和收场）、`/admin/pool` 生字池管理页、首页"今日复习 N 字"角标。
 > 与文档的偏差：单测配置用独立 `vitest.config.ts`（`vite.config.ts` 里的 @cloudflare/vite-plugin 需要远程凭据，纯函数单测不必拉起）。
+> 2026-07-12 返工：初版三模式混合（含家长判分的 read_aloud）不符合"孩子独立完成"要求，改为单一听音选字模式 + 田字格四选一（见 §9.2）。
 
 - Leitner 调度、到期查询、首页角标
-- 三模式测验 + 干扰项生成 + 内置常用字表
+- 听音选字测验（田字格四选一） + 干扰项生成 + 内置常用字表
 - 家长生字池管理（移除误点）
 - 验收：US-5 跑通；单元测试覆盖 leitner.ts
 

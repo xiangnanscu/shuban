@@ -35,13 +35,13 @@ export interface ArticleDetail {
 
 export type PinyinMode = 'show' | 'tap' | 'hidden';
 
-export type QuizMode = 'listen_pick' | 'pick_pinyin' | 'read_aloud';
+export type QuizMode = 'listen_pick';
 
 export interface QuizQuestion {
 	mode: QuizMode;
 	ch: string;
 	pinyin: string;
-	/** listen_pick：4 个汉字；pick_pinyin：4 个拼音；read_aloud：空数组 */
+	/** 4 个汉字选项（含目标字），田字格展示 */
 	options: string[];
 }
 

@@ -3,7 +3,7 @@ import type { AppEnv } from '../env';
 import { err, ok } from '../env';
 import { commonPinyinOf } from '../lib/common-chars';
 import { applyAnswer } from '../lib/leitner';
-import { buildQuestion, pickMode, QUIZ_MODES, type QuizChar, type QuizMode } from '../lib/quiz-gen';
+import { buildQuestion, QUIZ_MODES, type QuizChar, type QuizMode } from '../lib/quiz-gen';
 
 const SINGLE_HAN = /^\p{Script=Han}$/u;
 
@@ -42,12 +42,8 @@ export const quizRoutes = new Hono<AppEnv>()
 			.bind(target.ch)
 			.all<QuizChar>();
 
-		const requested = c.req.query('mode') as QuizMode | undefined;
-		let mode = requested && QUIZ_MODES.includes(requested) ? requested : pickMode();
-		// 读音未知的字无法出选项题/校验读音，退化为家长判分的读字题
-		if (!pinyin) mode = 'read_aloud';
-
-		return c.json(ok({ done: false as const, question: buildQuestion({ ch: target.ch, pinyin }, pool, mode) }));
+		// 读音未知时干扰项无法排除同音字（极少见），仍照常出听音选字题
+		return c.json(ok({ done: false as const, question: buildQuestion({ ch: target.ch, pinyin }, pool) }));
 	})
 
 	// 记答题流水 + Leitner 升降级；practice=true 只记流水不动盒（轮末重测、手动抽查用）

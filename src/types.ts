@@ -30,6 +30,8 @@ export interface ArticleDetail {
 	title: string;
 	status: 'draft' | 'published';
 	createdAt: string;
+	prevId: number | null;
+	nextId: number | null;
 	pages: ArticlePage[];
 }
 

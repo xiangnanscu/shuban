@@ -5,6 +5,37 @@ let zhVoice: SpeechSynthesisVoice | null = null;
 let voicesLoaded = false;
 let fallbackAudio: HTMLAudioElement | null = null;
 
+// 真人音节录音本身电平比 Web Speech 合成音量小很多（听感上单字明显弱于整句）。
+// 环境无 ffmpeg/sox 做响度归一化，且 Workers 运行时也跑不了，改在客户端用增益+限幅器补偿；
+// 限幅器兜底防止放大后削波。增益倍数可通过构建时环境变量 VITE_SYLLABLE_GAIN 调整（无需改代码重新发布逻辑）。
+const DEFAULT_SYLLABLE_GAIN = 2.2;
+const SYLLABLE_GAIN = (() => {
+	const raw = Number(import.meta.env.VITE_SYLLABLE_GAIN);
+	return raw > 0 ? raw : DEFAULT_SYLLABLE_GAIN;
+})();
+let audioCtx: AudioContext | null = null;
+let syllableGain: GainNode | null = null;
+let syllableSource: MediaElementAudioSourceNode | null = null;
+
+function getSyllableChain(): { ctx: AudioContext; gain: GainNode } | null {
+	if (typeof window === 'undefined' || !window.AudioContext) return null;
+	if (!audioCtx) {
+		audioCtx = new AudioContext();
+		syllableGain = audioCtx.createGain();
+		syllableGain.gain.value = SYLLABLE_GAIN;
+		const limiter = audioCtx.createDynamicsCompressor();
+		syllableGain.connect(limiter);
+		limiter.connect(audioCtx.destination);
+	}
+	return { ctx: audioCtx, gain: syllableGain! };
+}
+
+/** iOS 需在用户手势内创建/恢复 AudioContext，否则后续非手势场景（如异步取题后自动发音）静音 */
+export function unlockAudio(): void {
+	const chain = getSyllableChain();
+	if (chain?.ctx.state === 'suspended') void chain.ctx.resume();
+}
+
 function refreshVoices() {
 	const voices = speechSynthesis.getVoices();
 	voicesLoaded = voices.length > 0;
@@ -65,6 +96,13 @@ export function speak(text: string, pinyin?: string): void {
 		cancelSpeak();
 		const audio = new Audio(`/api/syllable/${encodeURIComponent(pinyin)}`);
 		fallbackAudio = audio;
+		const chain = getSyllableChain();
+		if (chain) {
+			syllableSource?.disconnect();
+			syllableSource = chain.ctx.createMediaElementSource(audio);
+			syllableSource.connect(chain.gain);
+			if (chain.ctx.state === 'suspended') void chain.ctx.resume();
+		}
 		let failed = false;
 		const fallback = () => {
 			if (failed) return;
@@ -98,5 +136,5 @@ export function speakAsync(text: string): Promise<void> {
 }
 
 export function useTts() {
-	return { speak, speakAsync, cancelSpeak };
+	return { speak, speakAsync, cancelSpeak, unlockAudio };
 }

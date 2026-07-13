@@ -69,12 +69,25 @@ export const articleRoutes = new Hono<AppEnv>()
 			.bind(id)
 			.all<PageRow>();
 
+		const authed = await isAuthed(c);
+		const visWhere = authed ? '' : "AND status = 'published'";
+		const [prev, next] = await Promise.all([
+			c.env.DB.prepare(`SELECT id FROM articles WHERE id < ?1 ${visWhere} ORDER BY id DESC LIMIT 1`)
+				.bind(id)
+				.first<{ id: number }>(),
+			c.env.DB.prepare(`SELECT id FROM articles WHERE id > ?1 ${visWhere} ORDER BY id ASC LIMIT 1`)
+				.bind(id)
+				.first<{ id: number }>(),
+		]);
+
 		return c.json(
 			ok({
 				id: article.id,
 				title: article.title,
 				status: article.status,
 				createdAt: article.created_at,
+				prevId: prev?.id ?? null,
+				nextId: next?.id ?? null,
 				pages: pages.map((p) => ({
 					id: p.id,
 					pageNo: p.page_no,

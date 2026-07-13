@@ -3,7 +3,7 @@
 // 对→升盒，错→归零；错题轮末重测一次（practice，不再动 Leitner）；连错 3 题温和收场。
 import { onMounted, ref } from 'vue';
 import { api } from '@/composables/useApi';
-import { speak } from '@/composables/useTts';
+import { speak, unlockAudio } from '@/composables/useTts';
 import type { QuizQuestion } from '@/types';
 
 type Phase = 'loading' | 'start' | 'question' | 'done' | 'empty';
@@ -49,6 +49,7 @@ function start(practice = false) {
 	wrongQuestions.length = 0;
 	consecutiveWrong = 0;
 	speak(' '); // 用户手势内触发一次，解锁 iOS 语音合成
+	unlockAudio(); // 同一手势内创建/恢复 AudioContext，供之后异步出题的真人音节增益链使用
 	void nextQuestion();
 }
 

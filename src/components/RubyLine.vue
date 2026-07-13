@@ -50,7 +50,7 @@ function onTap(tok: PageToken, i: number) {
 <style scoped>
 .line {
 	font-size: clamp(28px, 6vw, 44px);
-	line-height: 2.1;
+	line-height: 2.3;
 	margin: 0;
 	color: var(--ink);
 	touch-action: manipulation;
@@ -96,7 +96,7 @@ ruby.han.pop {
 	}
 }
 rt {
-	font-size: 0.42em;
+	font-size: 0.55em;
 	color: var(--pinyin, #8a6d3b);
 	letter-spacing: 0.02em;
 }

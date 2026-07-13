@@ -132,6 +132,29 @@ export const adminRoutes = new Hono<AppEnv>()
 		return c.json(ok({ id }));
 	})
 
+	// 清除单篇文章的点击历史（tap_events），并重算受影响字的 total_taps
+	.delete('/articles/:id/taps', async (c) => {
+		const id = Number(c.req.param('id'));
+		if (!Number.isInteger(id)) return c.json(err('bad_id', '无效 id'), 400);
+		const { results } = await c.env.DB.prepare('SELECT DISTINCT ch FROM tap_events WHERE article_id = ?1')
+			.bind(id)
+			.all<{ ch: string }>();
+		await c.env.DB.prepare('DELETE FROM tap_events WHERE article_id = ?1').bind(id).run();
+		for (const { ch } of results) {
+			await c.env.DB.prepare('UPDATE chars SET total_taps = (SELECT COUNT(*) FROM tap_events WHERE ch = ?1) WHERE ch = ?1')
+				.bind(ch)
+				.run();
+		}
+		return c.json(ok({ id, cleared: results.length }));
+	})
+
+	// 清除全部点击历史（tap_events 清空，chars.total_taps 归零）
+	.delete('/taps', async (c) => {
+		await c.env.DB.prepare('DELETE FROM tap_events').run();
+		await c.env.DB.prepare('UPDATE chars SET total_taps = 0').run();
+		return c.json(ok({ cleared: true }));
+	})
+
 	// 生字池全量列表（含毕业字），家长管理页用
 	.get('/review', async (c) => {
 		const { results } = await c.env.DB.prepare(

@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import PinyinToggle from '@/components/PinyinToggle.vue';
-import Recorder from '@/components/Recorder.vue';
 import RubyLine from '@/components/RubyLine.vue';
-import { api } from '@/composables/useApi';
+import { api, ApiError } from '@/composables/useApi';
+import { useRecorder } from '@/composables/useRecorder';
 import { recordTap } from '@/composables/useTapQueue';
 import { cancelSpeak, speak, speakAsync } from '@/composables/useTts';
 import type { ArticleDetail, PageLine, PageToken, PinyinMode } from '@/types';
@@ -15,8 +15,52 @@ const articleId = Number(route.params.id);
 const article = ref<ArticleDetail | null>(null);
 const pool = ref<Set<string>>(new Set());
 const showImage = ref(false);
-const showRecorder = ref(false);
 const error = ref('');
+
+// —— 朗读录音（点一下开始，再点一下结束并自动存档） ——
+const rec = useRecorder();
+const recSaving = ref(false);
+const recMsg = ref('');
+const recTimeLabel = computed(() => {
+	const s = rec.seconds.value;
+	return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+});
+
+async function toggleRecord() {
+	if (rec.recording.value) {
+		const result = rec.stop();
+		if (!result) return;
+		recSaving.value = true;
+		recMsg.value = '';
+		try {
+			const d = new Date();
+			const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+			const fileName = `${date}-${article.value?.title || '朗读'}.mp3`;
+			const form = new FormData();
+			form.set('file', new File([result.blob], fileName, { type: 'audio/mpeg' }));
+			form.set('articleId', String(articleId));
+			form.set('durationSec', String(result.durationSec));
+			await api('/api/recordings', { method: 'POST', body: form });
+			recMsg.value = '已存档 ✓';
+		} catch (e) {
+			recMsg.value = e instanceof ApiError ? e.message : '存档失败';
+		} finally {
+			recSaving.value = false;
+			rec.discard();
+			setTimeout(() => {
+				recMsg.value = '';
+			}, 2000);
+		}
+	} else {
+		stopListen();
+		recMsg.value = '';
+		try {
+			await rec.start();
+		} catch {
+			recMsg.value = rec.error.value;
+		}
+	}
+}
 
 const MODE_KEY = 'shuban.pinyinMode';
 const mode = ref<PinyinMode>((localStorage.getItem(MODE_KEY) as PinyinMode) || 'show');
@@ -63,6 +107,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
 	window.removeEventListener('pagehide', onPageHide);
 	stopListen();
+	rec.cancel();
 	endSession();
 });
 
@@ -152,8 +197,26 @@ function stopListen() {
 				</button>
 				<button v-if="listenState !== 'idle'" type="button" class="btn ghost small" @click="stopListen">⏹ 停止</button>
 				<span class="grow" />
-				<button type="button" class="btn small" @click="showRecorder = true">🎙️ 朗读模式</button>
+				<button
+					type="button"
+					class="btn ghost small rec-btn"
+					:class="{ recording: rec.recording.value }"
+					:disabled="recSaving"
+					@click="toggleRecord"
+				>
+					<template v-if="rec.recording.value">● {{ recTimeLabel }}</template>
+					<template v-else-if="recSaving">存档中…</template>
+					<template v-else-if="recMsg">{{ recMsg }}</template>
+					<template v-else>🎙️ 朗读模式</template>
+				</button>
 				<RouterLink class="btn ghost small" :to="`/recordings?articleId=${articleId}`">录音历史</RouterLink>
+			</div>
+
+			<div class="nav-row">
+				<RouterLink v-if="article.prevId" class="btn ghost" :to="`/read/${article.prevId}`">上一篇</RouterLink>
+				<span v-else class="btn ghost disabled">上一篇</span>
+				<RouterLink v-if="article.nextId" class="btn ghost" :to="`/read/${article.nextId}`">下一篇</RouterLink>
+				<span v-else class="btn ghost disabled">下一篇</span>
 			</div>
 
 			<section v-for="(pg, pi) in article.pages" :key="pg.id" class="page-section">
@@ -182,12 +245,6 @@ function stopListen() {
 				</main>
 			</section>
 
-			<Recorder
-				v-if="showRecorder"
-				:article-id="articleId"
-				:article-title="article.title"
-				@close="showRecorder = false"
-			/>
 		</template>
 	</div>
 </template>
@@ -225,6 +282,26 @@ function stopListen() {
 }
 .grow {
 	flex: 1;
+}
+.rec-btn.recording {
+	background: var(--danger);
+	border-color: var(--danger);
+	color: #fff;
+	font-variant-numeric: tabular-nums;
+}
+.nav-row {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	margin-bottom: 14px;
+}
+.nav-row .btn {
+	flex: 1;
+	text-align: center;
+}
+.nav-row .disabled {
+	opacity: 0.35;
+	pointer-events: none;
 }
 .original {
 	width: 100%;

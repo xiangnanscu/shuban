@@ -30,6 +30,18 @@ async function remove(a: ArticleSummary) {
 	await load();
 }
 
+async function clearTaps(a: ArticleSummary) {
+	if (!confirm(`清除《${a.title || '未命名'}》的点击历史？生字池与答题记录不受影响，不可恢复。`)) return;
+	await api(`/api/admin/articles/${a.id}/taps`, { method: 'DELETE' });
+	msg.value = '点击历史已清除';
+}
+
+async function clearAllTaps() {
+	if (!confirm('清除所有文章的点击历史？生字池与答题记录不受影响，不可恢复。')) return;
+	await api('/api/admin/taps', { method: 'DELETE' });
+	msg.value = '所有点击历史已清除';
+}
+
 async function changePin() {
 	msg.value = '';
 	try {
@@ -59,6 +71,7 @@ async function logout() {
 				<RouterLink to="/admin/upload" class="btn">＋ 上传新文章</RouterLink>
 				<RouterLink to="/admin/pool" class="btn ghost small">生字池</RouterLink>
 				<a href="/api/admin/export" download class="btn ghost small">导出数据</a>
+				<button type="button" class="btn ghost small" @click="clearAllTaps">清除所有点击历史</button>
 				<button type="button" class="btn ghost small" @click="showPinForm = !showPinForm">修改 PIN</button>
 				<button type="button" class="btn ghost small" @click="logout">退出</button>
 			</div>
@@ -84,6 +97,7 @@ async function logout() {
 						<button type="button" class="btn ghost small" @click="toggleStatus(a)">
 							{{ a.status === 'published' ? '下架' : '发布' }}
 						</button>
+						<button type="button" class="btn ghost small" @click="clearTaps(a)">清除点击历史</button>
 						<button type="button" class="btn danger small" @click="remove(a)">删除</button>
 					</td>
 				</tr>

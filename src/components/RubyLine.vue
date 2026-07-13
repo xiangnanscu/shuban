@@ -13,6 +13,37 @@ const emit = defineEmits<{ tap: [token: PageToken] }>();
 const revealed = ref<number | null>(null);
 const popped = ref<number | null>(null);
 
+// 滑动翻页/滚动时手指按下的起点也会先触发 pointerdown，
+// 所以真正的“点字”判定要等 pointerup，且要求位移和耗时都很小，
+// 否则会把滑动误判成点字。
+const TAP_MOVE_TOLERANCE = 10; // px
+const TAP_MAX_DURATION = 400; // ms
+let startX = 0;
+let startY = 0;
+let startT = 0;
+let tracking = false;
+
+function onPointerDown(e: PointerEvent) {
+	tracking = true;
+	startX = e.clientX;
+	startY = e.clientY;
+	startT = e.timeStamp;
+}
+
+function onPointerUp(e: PointerEvent, tok: PageToken, i: number) {
+	if (!tracking) return;
+	tracking = false;
+	const dx = e.clientX - startX;
+	const dy = e.clientY - startY;
+	const dt = e.timeStamp - startT;
+	if (Math.hypot(dx, dy) > TAP_MOVE_TOLERANCE || dt > TAP_MAX_DURATION) return;
+	onTap(tok, i);
+}
+
+function onPointerCancel() {
+	tracking = false;
+}
+
 function onTap(tok: PageToken, i: number) {
 	if (tok.p === undefined) return;
 	if (props.mode === 'tap') {
@@ -37,7 +68,9 @@ function onTap(tok: PageToken, i: number) {
 				v-if="tok.p !== undefined"
 				class="han"
 				:class="{ known: knownSet?.has(tok.t), pop: popped === i }"
-				@pointerdown.prevent="onTap(tok, i)"
+				@pointerdown="onPointerDown"
+				@pointerup="onPointerUp($event, tok, i)"
+				@pointercancel="onPointerCancel"
 				>{{ tok.t }}<rt :class="{ ghost: mode === 'hidden' || (mode === 'tap' && revealed !== i) }">{{
 					tok.p || ' '
 				}}</rt></ruby

@@ -26,40 +26,55 @@ const recTimeLabel = computed(() => {
 	return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 });
 
-async function toggleRecord() {
-	if (rec.recording.value) {
-		const result = rec.stop();
-		if (!result) return;
-		recSaving.value = true;
-		recMsg.value = '';
-		try {
-			const d = new Date();
-			const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-			const fileName = `${date}-${article.value?.title || '朗读'}.mp3`;
-			const form = new FormData();
-			form.set('file', new File([result.blob], fileName, { type: 'audio/mpeg' }));
-			form.set('articleId', String(articleId));
-			form.set('durationSec', String(result.durationSec));
-			await api('/api/recordings', { method: 'POST', body: form });
-			recMsg.value = '已存档 ✓';
-		} catch (e) {
-			recMsg.value = e instanceof ApiError ? e.message : '存档失败';
-		} finally {
-			recSaving.value = false;
-			rec.discard();
-			setTimeout(() => {
-				recMsg.value = '';
-			}, 2000);
-		}
-	} else {
-		stopListen();
-		recMsg.value = '';
-		try {
-			await rec.start();
-		} catch {
-			recMsg.value = rec.error.value;
-		}
+async function startRecording() {
+	stopListen();
+	recMsg.value = '';
+	try {
+		await rec.start();
+	} catch {
+		recMsg.value = rec.error.value;
 	}
+}
+
+async function finishRecording() {
+	const result = rec.stop();
+	if (!result) return;
+	recSaving.value = true;
+	recMsg.value = '';
+	try {
+		const d = new Date();
+		const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+		const fileName = `${date}-${article.value?.title || '朗读'}.mp3`;
+		const form = new FormData();
+		form.set('file', new File([result.blob], fileName, { type: 'audio/mpeg' }));
+		form.set('articleId', String(articleId));
+		form.set('durationSec', String(result.durationSec));
+		await api('/api/recordings', { method: 'POST', body: form });
+		recMsg.value = '已存档 ✓';
+	} catch (e) {
+		recMsg.value = e instanceof ApiError ? e.message : '存档失败';
+	} finally {
+		recSaving.value = false;
+		rec.discard();
+		setTimeout(() => {
+			recMsg.value = '';
+		}, 2000);
+	}
+}
+
+function toggleRecord() {
+	if (rec.recording.value) void finishRecording();
+	else void startRecording();
+}
+
+// —— 自动录音（默认开启，进入文章自动开始，离开自动结束并上传） ——
+const AUTO_REC_KEY = 'shuban.autoRecord';
+const autoRecord = ref(localStorage.getItem(AUTO_REC_KEY) !== '0');
+function setAutoRecord(v: boolean) {
+	autoRecord.value = v;
+	localStorage.setItem(AUTO_REC_KEY, v ? '1' : '0');
+	if (v && !rec.recording.value && article.value) void startRecording();
+	else if (!v && rec.recording.value) void finishRecording();
 }
 
 const MODE_KEY = 'shuban.pinyinMode';
@@ -90,6 +105,7 @@ onMounted(async () => {
 		const [a, p] = await Promise.all([api<ArticleDetail>(`/api/articles/${articleId}`), api<string[]>('/api/pool')]);
 		article.value = a;
 		pool.value = new Set(p);
+		if (autoRecord.value && rec.supported) void startRecording();
 	} catch (e) {
 		error.value = e instanceof Error ? e.message : '加载失败';
 	}
@@ -107,7 +123,8 @@ onMounted(async () => {
 onBeforeUnmount(() => {
 	window.removeEventListener('pagehide', onPageHide);
 	stopListen();
-	rec.cancel();
+	if (rec.recording.value) void finishRecording();
+	else rec.cancel();
 	endSession();
 });
 
@@ -210,13 +227,14 @@ function stopListen() {
 					<template v-else>🎙️ 朗读模式</template>
 				</button>
 				<RouterLink class="btn ghost small" :to="`/recordings?articleId=${articleId}`">录音历史</RouterLink>
-			</div>
-
-			<div class="nav-row">
-				<RouterLink v-if="article.prevId" class="btn ghost" :to="`/read/${article.prevId}`">上一篇</RouterLink>
-				<span v-else class="btn ghost disabled">上一篇</span>
-				<RouterLink v-if="article.nextId" class="btn ghost" :to="`/read/${article.nextId}`">下一篇</RouterLink>
-				<span v-else class="btn ghost disabled">下一篇</span>
+				<label class="switch">
+					<input
+						type="checkbox"
+						:checked="autoRecord"
+						@change="setAutoRecord(($event.target as HTMLInputElement).checked)"
+					/>
+					自动录音
+				</label>
 			</div>
 
 			<section v-for="(pg, pi) in article.pages" :key="pg.id" class="page-section">
@@ -245,6 +263,12 @@ function stopListen() {
 				</main>
 			</section>
 
+			<div class="nav-row">
+				<RouterLink v-if="article.prevId" class="btn ghost" :to="`/read/${article.prevId}`">上一篇</RouterLink>
+				<span v-else class="btn ghost disabled">上一篇</span>
+				<RouterLink v-if="article.nextId" class="btn ghost" :to="`/read/${article.nextId}`">下一篇</RouterLink>
+				<span v-else class="btn ghost disabled">下一篇</span>
+			</div>
 		</template>
 	</div>
 </template>
@@ -282,6 +306,15 @@ function stopListen() {
 }
 .grow {
 	flex: 1;
+}
+.switch {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 13px;
+	color: var(--ink);
+	cursor: pointer;
+	user-select: none;
 }
 .rec-btn.recording {
 	background: var(--danger);

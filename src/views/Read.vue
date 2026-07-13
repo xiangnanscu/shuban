@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import PinyinToggle from '@/components/PinyinToggle.vue';
 import RubyLine from '@/components/RubyLine.vue';
@@ -16,6 +16,24 @@ const article = ref<ArticleDetail | null>(null);
 const pool = ref<Set<string>>(new Set());
 const showImage = ref(false);
 const error = ref('');
+
+// 从重读计划跳来时，?focus= 指定要重点复习的字（高亮更醒目并滚动定位）
+const focusSet = computed(() => new Set([...String(route.query.focus ?? '')].filter((ch) => ch.trim())));
+
+async function scrollToFocus() {
+	if (focusSet.value.size === 0) return;
+	await nextTick();
+	const pages = article.value?.pages ?? [];
+	for (let pi = 0; pi < pages.length; pi++) {
+		const lines = pages[pi]?.content.lines ?? [];
+		for (let li = 0; li < lines.length; li++) {
+			if (lines[li]?.tokens.some((t) => focusSet.value.has(t.t))) {
+				document.getElementById(`line-${pi}-${li}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+				return;
+			}
+		}
+	}
+}
 
 // —— 朗读录音（点一下开始，再点一下结束并自动存档） ——
 const rec = useRecorder();
@@ -105,6 +123,7 @@ onMounted(async () => {
 		const [a, p] = await Promise.all([api<ArticleDetail>(`/api/articles/${articleId}`), api<string[]>('/api/pool')]);
 		article.value = a;
 		pool.value = new Set(p);
+		void scrollToFocus();
 		if (autoRecord.value && rec.supported) void startRecording();
 	} catch (e) {
 		error.value = e instanceof Error ? e.message : '加载失败';
@@ -249,7 +268,7 @@ function stopListen() {
 						class="line-row"
 						:class="{ active: pi === currentPage && li === currentLine && listenState !== 'idle' }"
 					>
-						<RubyLine :line="line" :mode="mode" :known-set="pool" @tap="onTap" />
+						<RubyLine :line="line" :mode="mode" :known-set="pool" :focus-set="focusSet" @tap="onTap" />
 						<button
 							v-if="line.tokens.length > 0"
 							type="button"

@@ -90,4 +90,19 @@ export interface PoolDetailItem {
 	graduated: boolean;
 }
 
+export interface ReadingPlanEntry {
+	articleId: number;
+	title: string;
+	/** 本篇为目标生字覆盖到的字 */
+	covers: string[];
+}
+
+export interface ReadingPlan {
+	scope: 'due' | 'all';
+	targetCount: number;
+	plan: ReadingPlanEntry[];
+	/** 没有任何文章包含的字（原文章已删等） */
+	uncovered: string[];
+}
+
 export const isHan = (s: string): boolean => /\p{Script=Han}/u.test(s);

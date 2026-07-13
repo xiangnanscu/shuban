@@ -6,6 +6,8 @@ const props = defineProps<{
 	line: PageLine;
 	mode: PinyinMode;
 	knownSet?: Set<string>;
+	/** 重读计划要重点复习的字，比普通生字高亮更醒目 */
+	focusSet?: Set<string>;
 }>();
 
 const emit = defineEmits<{ tap: [token: PageToken] }>();
@@ -67,7 +69,7 @@ function onTap(tok: PageToken, i: number) {
 			<ruby
 				v-if="tok.p !== undefined"
 				class="han"
-				:class="{ known: knownSet?.has(tok.t), pop: popped === i }"
+				:class="{ known: knownSet?.has(tok.t), focus: focusSet?.has(tok.t), pop: popped === i }"
 				@pointerdown="onPointerDown"
 				@pointerup="onPointerUp($event, tok, i)"
 				@pointercancel="onPointerCancel"
@@ -112,6 +114,11 @@ ruby.han {
 }
 ruby.han.known {
 	background: rgba(255, 214, 90, 0.35);
+}
+/* 重读计划的目标字：更醒目（在 known 之后，覆盖淡黄底纹） */
+ruby.han.focus {
+	background: rgba(255, 140, 40, 0.45);
+	outline: 2px solid var(--accent);
 }
 ruby.han.pop {
 	background: rgba(255, 160, 60, 0.55);

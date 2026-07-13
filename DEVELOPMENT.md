@@ -340,6 +340,7 @@ Base：同域 `/api`。响应统一 `{ ok: true, data }` 或 `{ ok: false, error
 | GET | `/api/files/:key` | R2 文件代理（图片/录音/TTS 缓存），带 `Cache-Control` |
 | POST | `/api/taps` | `{ch, articleId}` → 记流水、`chars` upsert、首次点击建 `review_items(box=0, due=今晚)` |
 | GET | `/api/review/due` | 今日到期字：`[{ch, pinyin, box}]`（`graduated=0 AND due_at<=now`） |
+| GET | `/api/review/reading-plan?scope=due\|all` | 重读计划（§9.5）：对目标生字集合求最少覆盖文章列表 `{scope, targetCount, plan:[{articleId,title,covers}], uncovered}` |
 | GET | `/api/quiz/next` | 服务端出一题（听音选字，含干扰项，见 §9.3） |
 | POST | `/api/quiz/answer` | `{ch, mode, correct}` → 记流水 + Leitner 升降级 |
 | POST | `/api/sessions/start` | `{articleId}` → `{sessionId}` |
@@ -635,6 +636,17 @@ getUserMedia({ audio: { echoCancellation:false, noiseSuppression:true } })
 
 - 每轮上限 10 题；错题在轮末重测一次（不额外计 Leitner 降级）。
 - 连错 3 题自动结束本轮，给鼓励文案——避免低龄挫败。
+
+### 9.5 重读计划（针对性重读，2026-07-13）
+
+测验只把错字归零重排（§9.1），不告诉孩子"去哪重读"。重读计划补这一环：给定要复习的生字集合 A，
+算出**最少数量、能覆盖 A**的文章列表，孩子点进去按 `?focus=` 高亮的字有针对性地重读纸书对应段落。
+
+- **A 的两种口径**（端点 `scope` 参数）：`due`（今日到期字，测验结束页默认用它——答对的已被 Leitner 推到未来、自动掉出）/ `all`（生字池全部未毕业字，周末集中重读用）。
+- **算法**：最小集合覆盖（NP-hard），贪心近似（`server/lib/reading-plan.ts` 纯函数，`test/reading-plan.test.ts` 覆盖）。每步选"新覆盖 A 中字最多"的已发布文章；平局取**最久没读**的（`reading_sessions` 里 `MAX(started_at)` 最早，**从没读过视为最早 → 最优先**），再平取 id 小的（确定性）。|A|≤十几时贪心几乎总是拿到真最优。
+- **字→文章倒排**即时算：读所有 published 文章的 `pages.content_json`，抽单个汉字建集合。单家庭规模（几十篇×几百字）每次查询几毫秒，零 schema 改动；数据大了再考虑落 `char_article` 表。
+- 原文章已删导致无文章可覆盖的字进 `uncovered`，单独提示家长。
+- **前端**：测验结束页"📖 针对性重读"区块（`scope=due`）；`/plan` 页可切换今日/全部（首页页脚入口）；文章链接带 `?focus=覆盖字`，`Read.vue` 复用 `RubyLine` 高亮（比普通生字淡黄底纹更醒目的橙色描边）并自动滚到首个目标字。
 
 ---
 

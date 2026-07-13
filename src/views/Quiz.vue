@@ -4,7 +4,7 @@
 import { onMounted, ref } from 'vue';
 import { api } from '@/composables/useApi';
 import { speak, unlockAudio } from '@/composables/useTts';
-import type { QuizQuestion } from '@/types';
+import type { QuizQuestion, ReadingPlan } from '@/types';
 
 type Phase = 'loading' | 'start' | 'question' | 'done' | 'empty';
 
@@ -20,6 +20,7 @@ const lastCorrect = ref(false);
 const retesting = ref(false);
 const practiceMode = ref(false);
 const endedEarly = ref(false);
+const readingPlan = ref<ReadingPlan | null>(null);
 
 const askedCount = ref(0);
 const correctCount = ref(0);
@@ -44,6 +45,7 @@ function start(practice = false) {
 	practiceMode.value = practice;
 	retesting.value = false;
 	endedEarly.value = false;
+	readingPlan.value = null;
 	askedCount.value = 0;
 	correctCount.value = 0;
 	wrongQuestions.length = 0;
@@ -88,6 +90,16 @@ function startRetest() {
 
 function finish() {
 	phase.value = 'done';
+	// 练习模式不动 Leitner，无“到期”概念，不出重读计划
+	if (practiceMode.value) return;
+	// 用剩余到期字（答对的已被推到未来、掉出到期）算最少覆盖文章 → 针对性重读
+	api<ReadingPlan>('/api/review/reading-plan?scope=due')
+		.then((r) => (readingPlan.value = r))
+		.catch(() => (readingPlan.value = null));
+}
+
+function readLink(articleId: number, covers: string[]): string {
+	return `/read/${articleId}?focus=${encodeURIComponent(covers.join(''))}`;
 }
 
 function answer(choice: string) {
@@ -230,6 +242,22 @@ function playDing() {
 			<div class="done-actions">
 				<button type="button" class="btn" @click="loadDue">再来一轮</button>
 				<RouterLink to="/" class="btn ghost">回首页</RouterLink>
+			</div>
+
+			<!-- 针对性重读：读最少的文章覆盖掉还没记牢的字 -->
+			<div v-if="readingPlan && readingPlan.plan.length > 0" class="reread">
+				<h2>📖 针对性重读</h2>
+				<p class="hint">读这 {{ readingPlan.plan.length }} 篇，把还没记牢的字再见一面：</p>
+				<RouterLink
+					v-for="e in readingPlan.plan"
+					:key="e.articleId"
+					class="reread-item"
+					:to="readLink(e.articleId, e.covers)"
+				>
+					<span class="rt">{{ e.title || '未命名' }}</span>
+					<span class="rc">{{ e.covers.join(' ') }}</span>
+				</RouterLink>
+				<RouterLink to="/plan" class="small-link">查看全部生字的重读计划 ›</RouterLink>
 			</div>
 		</div>
 	</div>
@@ -374,5 +402,47 @@ h1 {
 }
 .hint {
 	color: #9a8a70;
+}
+.reread {
+	max-width: 420px;
+	margin: 36px auto 0;
+	text-align: left;
+	border-top: 1px dashed rgba(154, 138, 112, 0.4);
+	padding-top: 20px;
+}
+.reread h2 {
+	font-size: 19px;
+	color: var(--accent);
+	margin: 0 0 4px;
+}
+.reread-item {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 12px;
+	background: #fff;
+	border-radius: 12px;
+	padding: 10px 14px;
+	margin-top: 10px;
+	text-decoration: none;
+	color: var(--ink);
+	box-shadow: 0 2px 8px rgba(90, 70, 40, 0.12);
+}
+.reread-item .rt {
+	font-size: 17px;
+	font-weight: 600;
+}
+.reread-item .rc {
+	font-family: 'Kaiti SC', 'STKaiti', KaiTi, serif;
+	font-size: 22px;
+	letter-spacing: 3px;
+	color: var(--accent);
+	text-align: right;
+}
+.small-link {
+	display: inline-block;
+	margin-top: 14px;
+	font-size: 14px;
+	color: #b0a186;
 }
 </style>

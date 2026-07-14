@@ -1,6 +1,7 @@
 import type { Bindings } from '../env';
 import { getOcrProviders } from '../ocr';
 import type { OcrProvider, PageContent } from '../ocr';
+import { applyAiSettings, getAiSettings } from './settings';
 
 interface PageRow {
 	id: number;
@@ -52,10 +53,11 @@ export async function runOcrForPage(env: Bindings, pageId: number): Promise<void
 		if (!obj) throw new Error(`R2 缺图 ${page.image_key}`);
 		const image = await obj.arrayBuffer();
 
-		const providers = getOcrProviders(env);
+		const effectiveEnv = applyAiSettings(env, await getAiSettings(env.DB));
+		const providers = getOcrProviders(effectiveEnv);
 		if (providers.length === 0) throw new Error('没有任何可用的 OCR provider（检查 OCR_PROVIDER 与各家 key）');
 
-		const timeoutMs = getProviderTimeoutMs(env);
+		const timeoutMs = getProviderTimeoutMs(effectiveEnv);
 		let content = null;
 		const errors: string[] = [];
 		for (const { name, provider } of providers) {

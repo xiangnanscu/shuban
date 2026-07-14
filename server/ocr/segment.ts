@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { Bindings } from '../env';
 import { toBase64 } from '../lib/bytes';
 import { getProviderTimeoutMs } from '../lib/ocr-run';
+import { applyAiSettings, getAiSettings } from '../lib/settings';
 
 /** 一篇文章的分组结果：title 为可读到的篇名，pages 为上传图片的 0 基下标（阅读顺序） */
 export interface ArticleGroup {
@@ -231,9 +232,10 @@ async function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>, timeoutM
 export async function segmentImages(env: Bindings, images: ArrayBuffer[]): Promise<ArticleGroup[]> {
 	if (images.length <= 1) return [{ title: null, pages: images.map((_, i) => i) }];
 
-	const segmenters = getSegmenters(env);
+	const effectiveEnv = applyAiSettings(env, await getAiSettings(env.DB));
+	const segmenters = getSegmenters(effectiveEnv);
 	// 多图一次推理比单页 OCR 重，给 2 倍超时
-	const timeoutMs = getProviderTimeoutMs(env) * 2;
+	const timeoutMs = getProviderTimeoutMs(effectiveEnv) * 2;
 	for (const s of segmenters) {
 		try {
 			const raw = await withTimeout((signal) => s.segment(images, signal), timeoutMs);

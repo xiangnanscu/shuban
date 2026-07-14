@@ -4,7 +4,8 @@ import type { AppEnv, OcrMessage } from '../env';
 import { err, ok } from '../env';
 import { adminAuth, createSessionToken, currentPinVersion, hashPin, randomSaltHex, SESSION_COOKIE } from '../lib/auth';
 import { segmentImages } from '../ocr/segment';
-import { getSetting, setSetting } from '../lib/settings';
+import { AI_PROVIDERS, type AiProviderName, getAiSettings, getSetting, setAiSettings, setSetting } from '../lib/settings';
+import { getProviderTimeoutMs } from '../lib/ocr-run';
 import { timingSafeEqual } from '../lib/bytes';
 import type { PageLine } from '../ocr';
 
@@ -275,6 +276,64 @@ export const adminRoutes = new Hono<AppEnv>()
 		const ch = c.req.param('ch');
 		await c.env.DB.prepare('DELETE FROM review_items WHERE ch = ?1').bind(ch).run();
 		return c.json(ok({ ch }));
+	})
+
+	// AI 设置：识别引擎优先级、各家模型、超时。当前生效值 + wrangler vars 里的出厂默认值
+	.get('/settings/ai', async (c) => {
+		const s = await getAiSettings(c.env.DB);
+		return c.json(
+			ok({
+				primaryProvider: s.primaryProvider,
+				geminiModel: s.geminiModel,
+				workersaiModel: s.workersaiModel,
+				claudeModel: s.claudeModel,
+				timeoutMs: s.timeoutMs,
+				defaults: {
+					providerOrder: c.env.OCR_PROVIDER.split(',')
+						.map((x) => x.trim())
+						.filter(Boolean),
+					geminiModel: c.env.GEMINI_MODEL,
+					workersaiModel: c.env.WORKERSAI_MODEL,
+					claudeModel: c.env.CLAUDE_MODEL,
+					timeoutMs: getProviderTimeoutMs(c.env),
+				},
+			}),
+		);
+	})
+
+	.put('/settings/ai', async (c) => {
+		const body = await c.req
+			.json<{
+				primaryProvider?: AiProviderName | null;
+				geminiModel?: string | null;
+				workersaiModel?: string | null;
+				claudeModel?: string | null;
+				timeoutMs?: number | string | null;
+			}>()
+			.catch(() => null);
+		if (!body) return c.json(err('bad_body', '请求体不是 JSON'), 400);
+
+		if (body.primaryProvider != null && !(AI_PROVIDERS as readonly string[]).includes(body.primaryProvider)) {
+			return c.json(err('bad_provider', '未知引擎'), 400);
+		}
+		let timeoutStr: string | null | undefined;
+		if (body.timeoutMs !== undefined) {
+			if (body.timeoutMs === null || body.timeoutMs === '') timeoutStr = null;
+			else {
+				const n = Number(body.timeoutMs);
+				if (!Number.isFinite(n) || n <= 0) return c.json(err('bad_timeout', '超时需为正数'), 400);
+				timeoutStr = String(Math.round(n));
+			}
+		}
+
+		await setAiSettings(c.env.DB, {
+			...(body.primaryProvider !== undefined && { primaryProvider: body.primaryProvider }),
+			...(body.geminiModel !== undefined && { geminiModel: body.geminiModel?.trim() || null }),
+			...(body.workersaiModel !== undefined && { workersaiModel: body.workersaiModel?.trim() || null }),
+			...(body.claudeModel !== undefined && { claudeModel: body.claudeModel?.trim() || null }),
+			...(timeoutStr !== undefined && { timeoutMs: timeoutStr }),
+		});
+		return c.json(ok(await getAiSettings(c.env.DB)));
 	})
 
 	// 改 PIN（会话全部失效并重发本会话）

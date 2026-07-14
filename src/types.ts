@@ -106,4 +106,21 @@ export interface ReadingPlan {
 	uncovered: string[];
 }
 
+export type AiProviderName = 'gemini' | 'workersai' | 'claude';
+
+export interface AiSettings {
+	primaryProvider: AiProviderName | null;
+	geminiModel: string | null;
+	workersaiModel: string | null;
+	claudeModel: string | null;
+	timeoutMs: number | null;
+	defaults: {
+		providerOrder: AiProviderName[];
+		geminiModel: string;
+		workersaiModel: string;
+		claudeModel: string;
+		timeoutMs: number;
+	};
+}
+
 export const isHan = (s: string): boolean => /\p{Script=Han}/u.test(s);

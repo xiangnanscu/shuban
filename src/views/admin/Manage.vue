@@ -2,7 +2,7 @@
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api, ApiError } from '@/composables/useApi';
-import type { ArticleSummary } from '@/types';
+import type { AiProviderName, AiSettings, ArticleSummary } from '@/types';
 
 const router = useRouter();
 const articles = ref<ArticleSummary[]>([]);
@@ -10,6 +10,48 @@ const msg = ref('');
 const showPinForm = ref(false);
 const oldPin = ref('');
 const newPin = ref('');
+
+const PROVIDER_LABEL: Record<AiProviderName, string> = { gemini: 'Gemini', workersai: 'Workers AI', claude: 'Claude' };
+const showAiForm = ref(false);
+const ai = ref<AiSettings | null>(null);
+const aiPrimaryProvider = ref<AiProviderName | ''>('');
+const aiGeminiModel = ref('');
+const aiWorkersaiModel = ref('');
+const aiClaudeModel = ref('');
+const aiTimeoutMs = ref('');
+
+async function loadAiSettings() {
+	ai.value = await api<AiSettings>('/api/admin/settings/ai');
+	aiPrimaryProvider.value = ai.value.primaryProvider ?? '';
+	aiGeminiModel.value = ai.value.geminiModel ?? '';
+	aiWorkersaiModel.value = ai.value.workersaiModel ?? '';
+	aiClaudeModel.value = ai.value.claudeModel ?? '';
+	aiTimeoutMs.value = ai.value.timeoutMs ? String(ai.value.timeoutMs) : '';
+}
+
+async function toggleAiForm() {
+	showAiForm.value = !showAiForm.value;
+	if (showAiForm.value && !ai.value) await loadAiSettings();
+}
+
+async function saveAiSettings() {
+	msg.value = '';
+	try {
+		ai.value = await api<AiSettings>('/api/admin/settings/ai', {
+			method: 'PUT',
+			body: JSON.stringify({
+				primaryProvider: aiPrimaryProvider.value || null,
+				geminiModel: aiGeminiModel.value.trim() || null,
+				workersaiModel: aiWorkersaiModel.value.trim() || null,
+				claudeModel: aiClaudeModel.value.trim() || null,
+				timeoutMs: aiTimeoutMs.value.trim() || null,
+			}),
+		});
+		msg.value = 'AI 设置已保存';
+	} catch (e) {
+		msg.value = e instanceof ApiError ? e.message : '保存失败';
+	}
+}
 
 async function load() {
 	articles.value = await api<ArticleSummary[]>('/api/articles');
@@ -73,6 +115,7 @@ async function logout() {
 				<a href="/api/admin/export" download class="btn ghost small">导出数据</a>
 				<button type="button" class="btn ghost small" @click="clearAllTaps">清除所有点击历史</button>
 				<button type="button" class="btn ghost small" @click="showPinForm = !showPinForm">修改 PIN</button>
+				<button type="button" class="btn ghost small" @click="toggleAiForm">AI 设置</button>
 				<button type="button" class="btn ghost small" @click="logout">退出</button>
 			</div>
 		</header>
@@ -82,6 +125,36 @@ async function logout() {
 			<input v-model="newPin" type="password" inputmode="numeric" maxlength="6" placeholder="新 PIN（6 位数字）" />
 			<button class="btn small" type="submit">确认修改</button>
 		</form>
+
+		<form v-if="showAiForm && ai" class="aiform" @submit.prevent="saveAiSettings">
+			<label>
+				优先识别引擎
+				<select v-model="aiPrimaryProvider">
+					<option value="">默认顺序（{{ ai.defaults.providerOrder.map((p) => PROVIDER_LABEL[p]).join(' → ') }}）</option>
+					<option v-for="p in ai.defaults.providerOrder" :key="p" :value="p">{{ PROVIDER_LABEL[p] }} 优先</option>
+				</select>
+			</label>
+			<p class="hint small">选中引擎失败会自动降级到其余引擎，顺序不变，保证识别不中断。</p>
+			<label>
+				Gemini 模型
+				<input v-model="aiGeminiModel" type="text" :placeholder="ai.defaults.geminiModel" />
+			</label>
+			<label>
+				Workers AI 模型
+				<input v-model="aiWorkersaiModel" type="text" :placeholder="ai.defaults.workersaiModel" />
+			</label>
+			<label>
+				Claude 模型
+				<input v-model="aiClaudeModel" type="text" :placeholder="ai.defaults.claudeModel" />
+			</label>
+			<label>
+				单次识别超时（毫秒）
+				<input v-model="aiTimeoutMs" type="number" min="1" :placeholder="String(ai.defaults.timeoutMs)" />
+			</label>
+			<p class="hint small">模型 / 超时留空即用出厂默认值（Workers AI 出厂默认为 Kimi）。</p>
+			<button class="btn small" type="submit">保存 AI 设置</button>
+		</form>
+
 		<p v-if="msg" class="hint">{{ msg }}</p>
 
 		<table v-if="articles.length" class="list">
@@ -136,6 +209,34 @@ h1 {
 	gap: 8px;
 	margin-top: 14px;
 	flex-wrap: wrap;
+}
+.aiform {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin-top: 14px;
+	padding: 14px;
+	border: 1px solid #eadfca;
+	border-radius: 8px;
+	max-width: 420px;
+}
+.aiform label {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: 14px;
+	font-weight: 600;
+}
+.aiform input,
+.aiform select {
+	font-weight: normal;
+	padding: 6px 8px;
+	border: 1px solid #eadfca;
+	border-radius: 6px;
+}
+.hint.small {
+	font-size: 12px;
+	margin: 0;
 }
 .list {
 	width: 100%;

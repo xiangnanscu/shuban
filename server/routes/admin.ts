@@ -8,10 +8,32 @@ import { AI_PROVIDERS, type AiProviderName, getAiSettings, getSetting, setAiSett
 import { getProviderTimeoutMs } from '../lib/ocr-run';
 import { timingSafeEqual } from '../lib/bytes';
 import type { PageLine } from '../ocr';
+import type { Bindings } from '../env';
 
 const MAX_IMAGES = 20;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+/** 当前生效的 AI 设置 + wrangler vars 里的出厂默认值；GET/PUT /settings/ai 共用，避免 PUT 响应漏字段 */
+async function aiSettingsPayload(env: Bindings) {
+	const s = await getAiSettings(env.DB);
+	return {
+		primaryProvider: s.primaryProvider,
+		geminiModel: s.geminiModel,
+		workersaiModel: s.workersaiModel,
+		claudeModel: s.claudeModel,
+		timeoutMs: s.timeoutMs,
+		defaults: {
+			providerOrder: env.OCR_PROVIDER.split(',')
+				.map((x) => x.trim())
+				.filter(Boolean),
+			geminiModel: env.GEMINI_MODEL,
+			workersaiModel: env.WORKERSAI_MODEL,
+			claudeModel: env.CLAUDE_MODEL,
+			timeoutMs: getProviderTimeoutMs(env),
+		},
+	};
+}
 
 export const adminRoutes = new Hono<AppEnv>()
 	.use('*', adminAuth)
@@ -279,27 +301,7 @@ export const adminRoutes = new Hono<AppEnv>()
 	})
 
 	// AI 设置：识别引擎优先级、各家模型、超时。当前生效值 + wrangler vars 里的出厂默认值
-	.get('/settings/ai', async (c) => {
-		const s = await getAiSettings(c.env.DB);
-		return c.json(
-			ok({
-				primaryProvider: s.primaryProvider,
-				geminiModel: s.geminiModel,
-				workersaiModel: s.workersaiModel,
-				claudeModel: s.claudeModel,
-				timeoutMs: s.timeoutMs,
-				defaults: {
-					providerOrder: c.env.OCR_PROVIDER.split(',')
-						.map((x) => x.trim())
-						.filter(Boolean),
-					geminiModel: c.env.GEMINI_MODEL,
-					workersaiModel: c.env.WORKERSAI_MODEL,
-					claudeModel: c.env.CLAUDE_MODEL,
-					timeoutMs: getProviderTimeoutMs(c.env),
-				},
-			}),
-		);
-	})
+	.get('/settings/ai', async (c) => c.json(ok(await aiSettingsPayload(c.env))))
 
 	.put('/settings/ai', async (c) => {
 		const body = await c.req
@@ -333,7 +335,7 @@ export const adminRoutes = new Hono<AppEnv>()
 			...(body.claudeModel !== undefined && { claudeModel: body.claudeModel?.trim() || null }),
 			...(timeoutStr !== undefined && { timeoutMs: timeoutStr }),
 		});
-		return c.json(ok(await getAiSettings(c.env.DB)));
+		return c.json(ok(await aiSettingsPayload(c.env)));
 	})
 
 	// 改 PIN（会话全部失效并重发本会话）

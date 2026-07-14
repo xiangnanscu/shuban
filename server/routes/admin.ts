@@ -1,9 +1,8 @@
 import { Hono } from 'hono';
 import { setCookie } from 'hono/cookie';
-import type { AppEnv } from '../env';
+import type { AppEnv, OcrMessage } from '../env';
 import { err, ok } from '../env';
 import { adminAuth, createSessionToken, currentPinVersion, hashPin, randomSaltHex, SESSION_COOKIE } from '../lib/auth';
-import { runOcrForPage } from '../lib/ocr-run';
 import { segmentImages } from '../ocr/segment';
 import { getSetting, setSetting } from '../lib/settings';
 import { timingSafeEqual } from '../lib/bytes';
@@ -46,9 +45,7 @@ export const adminRoutes = new Hono<AppEnv>()
 			.bind(`img/${articleId}/1.jpg`, articleId)
 			.run();
 
-		for (const pid of pageIds) {
-			c.executionCtx.waitUntil(runOcrForPage(c.env, pid));
-		}
+		await c.env.OCR_QUEUE.sendBatch(pageIds.map((id) => ({ body: { pageId: id } })));
 		return c.json(ok({ articleId }));
 	})
 
@@ -71,6 +68,7 @@ export const adminRoutes = new Hono<AppEnv>()
 		const groups = await segmentImages(c.env, segBuffers);
 
 		const created: { articleId: number; title: string; pages: { id: number; pageNo: number }[] }[] = [];
+		const ocrMessages: { body: OcrMessage }[] = [];
 		for (const g of groups) {
 			const title = g.title ?? '';
 			const ins = await c.env.DB.prepare('INSERT INTO articles (title) VALUES (?1)').bind(title).run();
@@ -90,12 +88,11 @@ export const adminRoutes = new Hono<AppEnv>()
 				.bind(`img/${articleId}/1.jpg`, articleId)
 				.run();
 
-			// 服务端先行触发 OCR（best-effort）；前端进度页会兜底重触发卡住的页，避免 waitUntil 被回收后永久 pending
-			for (const { id } of pagesMeta) {
-				c.executionCtx.waitUntil(runOcrForPage(c.env, id));
-			}
+			for (const { id } of pagesMeta) ocrMessages.push({ body: { pageId: id } });
 			created.push({ articleId, title, pages: pagesMeta });
 		}
+		// 全部页投递到 OCR 队列，由后台消费者识别（不依赖本请求存活或浏览器开着）
+		if (ocrMessages.length) await c.env.OCR_QUEUE.sendBatch(ocrMessages);
 		return c.json(ok({ articles: created }));
 	})
 
@@ -119,7 +116,7 @@ export const adminRoutes = new Hono<AppEnv>()
 		await c.env.DB.prepare("UPDATE pages SET image_version = ?1, ocr_status = 'pending' WHERE id = ?2")
 			.bind(imageVersion, pageId)
 			.run();
-		c.executionCtx.waitUntil(runOcrForPage(c.env, pageId));
+		await c.env.OCR_QUEUE.send({ pageId });
 		return c.json(ok({ pageId, imageUrl: `/api/files/${row.image_key}?v=${imageVersion}` }));
 	})
 
@@ -131,7 +128,7 @@ export const adminRoutes = new Hono<AppEnv>()
 			.bind(pageId)
 			.first();
 		if (!row) return c.json(err('not_found', '页不存在'), 404);
-		c.executionCtx.waitUntil(runOcrForPage(c.env, pageId));
+		await c.env.OCR_QUEUE.send({ pageId });
 		return c.json(ok({ pageId }));
 	})
 

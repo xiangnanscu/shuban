@@ -185,7 +185,7 @@ onBeforeUnmount(stopPolling);
 
 		<div v-if="results.length" class="results">
 			<p v-if="allDone" class="banner ok">✅ 全部识别完成，共 {{ results.length }} 篇草稿，请逐篇校对后发布</p>
-			<p v-else class="banner run">🔍 已分为 {{ results.length }} 篇，正在逐篇识别正文…（可先离开，识别在后台继续，稍后回来校对）</p>
+			<p v-else class="banner run">🔍 已分为 {{ results.length }} 篇，正在后台逐篇识别正文…（识别在服务器进行，可关闭本页/浏览器，稍后回来校对）</p>
 
 			<ul>
 				<li v-for="a in results" :key="a.articleId" class="artrow">

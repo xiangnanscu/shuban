@@ -29,6 +29,10 @@
 		"binding": "AI",
 		"remote": true
 	},
+	"queues": {
+		"producers": [{ "binding": "OCR_QUEUE", "queue": "shuban-ocr" }],
+		"consumers": [{ "queue": "shuban-ocr", "max_batch_size": 3, "max_batch_timeout": 2, "max_retries": 2 }]
+	},
 	"vars": {
 		"OCR_PROVIDER": "gemini,workersai,claude",
 		"GEMINI_MODEL": "gemini-flash-latest",

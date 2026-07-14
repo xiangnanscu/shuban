@@ -369,7 +369,11 @@ Base：同域 `/api`。响应统一 `{ ok: true, data }` 或 `{ ok: false, error
 | PUT | `/api/admin/settings` | 改 PIN、开关（如生字高亮） |
 | GET | `/api/admin/stats/chars` | 每字详情列表（点击数、答题正误、box） |
 
-**OCR 的执行位置**：在 `POST /api/admin/articles` 的 handler 里对每页 `ctx.waitUntil(runOcr(page))` 异步执行，页面状态由 `pages.ocr_status` 驱动。Claude 单页调用通常 <30s，在 Worker 的 fetch 时限内（有 waitUntil 兜底）；无需 Queues。
+**OCR 的执行位置（2026-07-14 改为 Cloudflare Queues）**：建文章 / 重识别 / 换图的 handler **不再**用 `waitUntil` 直接跑 OCR，而是把每页投递到 `OCR_QUEUE`（`send` / `sendBatch`）；Worker 导出 `queue(batch, env)` 消费者逐页调 `runOcrForPage`，页面状态由 `pages.ocr_status` 驱动。这样 OCR 完全脱离 HTTP 请求与浏览器生命周期——家长关掉浏览器，识别仍在服务端后台完成。
+
+> 为何弃用 `waitUntil`：批量建文章在**同一次调用**里先同步分篇、再排队多页 OCR，分篇耗时挤占响应后预算，`waitUntil` 易被回收 → 页面永久卡在 `pending`。队列每条消息由独立、预算充足的消费者 invocation 处理，无此问题，且自带重试。**注意：Queues 需要 Workers 付费计划（$5/月），不在免费额度内**——若坚持免费档，回退方案是 `waitUntil` + 前端进度页轮询兜底重触发（见 git 历史 be6cc92）。
+>
+> `runOcrForPage` 内部已捕获错误并把该页标 `failed`（正常返回）→ 消费者 `ack`，不会因单页识别失败触发队列重投风暴；仅意外抛错（DB 故障等）才 `retry`。
 
 ---
 
@@ -541,9 +545,9 @@ return JSON.parse(text) as PageContent;
 - **降分辨率省 token**：Gemini 按**像素尺寸**（非字节）计费，一次性多图调用是 token 大头。分组+排序只需读页码/标题/版式，不需 OCR 级清晰度——前端在分篇模式额外生成 **1024px / q0.6 缩略图**（`segThumbs[]`）专供分篇，正文仍用 1568px 全分辨率图识别。缩略图缺失或数量不符时服务端自动退回全分辨率图。相比全分辨率多图，分篇调用输入 token 约降到 1/2~1/3。
 - **引擎链**：复用 `OCR_PROVIDER` 顺序，但只取 **gemini / claude**（多图整篇推理需要，Kimi 多图推理不稳，跳过）。超时取 `OCR_TIMEOUT_MS × 2`（多图比单页重）。Gemini 用 `responseSchema`、Claude 用 `output_config` json_schema，与 §7.2/§7.6 同构。
 - **健壮性**：`normalizeGroups` 保证每个下标恰好出现一次、无越界；模型漏分的图就近并入最后一篇，绝不丢弃。全部引擎失败 / 无可用 key → **退化为「所有图按上传顺序合成一篇」**，绝不阻断建文章。单图直接单篇、不调模型。
-- **执行位置**：分篇在 `POST /api/admin/articles/batch` 的 handler 内**同步**完成（需要分组结果才能建文章），随后每页 OCR 仍走 `waitUntil` 异步。分篇未给出的标题由第 1 页 OCR 的 `title` 兜底（`UPDATE ... WHERE title=''`）。
-- **前端**：`Upload.vue` 增「单篇上传 / AI 自动分篇」切换；分篇模式隐藏标题输入。提交后进入**识别进度页**：轮询各篇 `GET /api/articles/:id` 展示每页识别中/已识别/失败的圆点，直到全部完成（无需人工确认，分组后自动逐篇识别）。批量接口返回 `pages:[{id,pageNo}]` 供进度页定位。
-- **卡住自愈**：服务端 `waitUntil` 在「同一次调用先做同步分篇、再排队多页 OCR」时可能被回收，导致页面永久 `pending`。进度页对 `pending` 超 90s 的页**在新请求里重触发** `POST /api/admin/pages/:id/ocr`（每页最多一次）；`failed` 页显示红点可手动重试。每次重触发都是全新 invocation、预算充足，规避回收问题。
+- **执行位置**：分篇在 `POST /api/admin/articles/batch` 的 handler 内**同步**完成（需要分组结果才能建文章），随后把每页投递到 `OCR_QUEUE`，由后台消费者识别（见 §6「OCR 的执行位置」）。分篇未给出的标题由第 1 页 OCR 的 `title` 兜底（`UPDATE ... WHERE title=''`）。
+- **前端**：`Upload.vue` 增「单篇上传 / AI 自动分篇」切换；分篇模式隐藏标题输入。提交后进入**识别进度页**：轮询各篇 `GET /api/articles/:id` 展示每页识别中/已识别/失败的圆点，直到全部完成（无需人工确认，分组后自动逐篇识别）。批量接口返回 `pages:[{id,pageNo}]` 供进度页定位。识别在服务端队列进行，进度页只是监视——关掉也不影响识别完成。
+- **进度页自愈（兜底）**：`pending` 超 90s 的页会在新请求里重触发 `POST /api/admin/pages/:id/ocr`（每页最多一次），`failed` 页红点可手动重试。改用队列后此路径几乎不会触发，作为极端积压时的最后防线保留。
 
 ---
 
@@ -697,6 +701,10 @@ getUserMedia({ audio: { echoCancellation:false, noiseSuppression:true } })
     { "binding": "BUCKET", "bucket_name": "shuban" }
   ],
   "ai": { "binding": "AI" },
+  "queues": {                                              // 需 Workers 付费计划
+    "producers": [{ "binding": "OCR_QUEUE", "queue": "shuban-ocr" }],
+    "consumers": [{ "queue": "shuban-ocr", "max_batch_size": 3, "max_batch_timeout": 2, "max_retries": 2 }]
+  },
   "vars": {
     "OCR_PROVIDER": "gemini,workersai,claude",
     "GEMINI_MODEL": "gemini-flash-latest",
@@ -708,6 +716,8 @@ getUserMedia({ audio: { echoCancellation:false, noiseSuppression:true } })
 }
 ```
 
+> **OCR_QUEUE 需要 Workers 付费计划（$5/月）**。若要留在免费档，删掉 `queues` 配置并把 OCR 触发改回 `waitUntil`（见 §6 说明与 git 历史 be6cc92）。
+
 ### 11.2 初始化步骤
 
 ```sh
@@ -717,6 +727,7 @@ cd shuban && npm i hono @anthropic-ai/sdk @breezystack/lamejs
 npx wrangler d1 create shuban                            # 取 database_id 填入 wrangler.jsonc
 npx wrangler d1 migrations apply shuban --local          # 本地建表
 npx wrangler r2 bucket create shuban
+npx wrangler queues create shuban-ocr                    # OCR 后台队列（需 Workers 付费计划）
 
 npx wrangler secret put ANTHROPIC_API_KEY
 npx wrangler secret put SESSION_SECRET                   # openssl rand -hex 32

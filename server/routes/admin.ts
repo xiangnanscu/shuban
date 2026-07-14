@@ -64,7 +64,11 @@ export const adminRoutes = new Hono<AppEnv>()
 		}
 
 		const buffers = await Promise.all(files.map((f) => f.arrayBuffer()));
-		const groups = await segmentImages(c.env, buffers);
+		// 分篇用小缩略图（前端另传，只做分组+排序，省 token）；缺失或数量不符则退回全分辨率图
+		const thumbFiles = form.getAll('segThumbs').filter((f): f is File => f instanceof File);
+		const segBuffers =
+			thumbFiles.length === files.length ? await Promise.all(thumbFiles.map((f) => f.arrayBuffer())) : buffers;
+		const groups = await segmentImages(c.env, segBuffers);
 
 		const created: { articleId: number; title: string; pageCount: number }[] = [];
 		for (const g of groups) {

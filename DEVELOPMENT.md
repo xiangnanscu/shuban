@@ -538,6 +538,7 @@ return JSON.parse(text) as PageContent;
 家长可一次性上传多篇文章、顺序打乱的所有页面，AI 自行推断分组与页序，一次建成多篇草稿。与逐页 OCR 是两件事：**分篇只做「分组 + 排序」，不转写正文**。
 
 - **实现**：`server/ocr/segment.ts` 的 `segmentImages(env, images)`。一次调用把**全部图片**发给模型（每张图前用文字标出 `index N`），要求返回 `articles:[{title, pages:[index...]}]`——`pages` 是上传下标的阅读顺序。判断依据：页码（页眉页脚数字）、新标题出现、语义衔接、版式/插图风格。
+- **降分辨率省 token**：Gemini 按**像素尺寸**（非字节）计费，一次性多图调用是 token 大头。分组+排序只需读页码/标题/版式，不需 OCR 级清晰度——前端在分篇模式额外生成 **1024px / q0.6 缩略图**（`segThumbs[]`）专供分篇，正文仍用 1568px 全分辨率图识别。缩略图缺失或数量不符时服务端自动退回全分辨率图。相比全分辨率多图，分篇调用输入 token 约降到 1/2~1/3。
 - **引擎链**：复用 `OCR_PROVIDER` 顺序，但只取 **gemini / claude**（多图整篇推理需要，Kimi 多图推理不稳，跳过）。超时取 `OCR_TIMEOUT_MS × 2`（多图比单页重）。Gemini 用 `responseSchema`、Claude 用 `output_config` json_schema，与 §7.2/§7.6 同构。
 - **健壮性**：`normalizeGroups` 保证每个下标恰好出现一次、无越界；模型漏分的图就近并入最后一篇，绝不丢弃。全部引擎失败 / 无可用 key → **退化为「所有图按上传顺序合成一篇」**，绝不阻断建文章。单图直接单篇、不调模型。
 - **执行位置**：分篇在 `POST /api/admin/articles/batch` 的 handler 内**同步**完成（需要分组结果才能建文章），随后每页 OCR 仍走 `waitUntil` 异步。分篇未给出的标题由第 1 页 OCR 的 `title` 兜底（`UPDATE ... WHERE title=''`）。

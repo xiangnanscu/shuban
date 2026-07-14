@@ -52,6 +52,12 @@ async function submit() {
 			progress.value = `压缩图片 ${i + 1}/${files.value.length}…`;
 			const blob = await compressImage(item.file, 1568, 0.85, item.rotation);
 			form.append('images', new File([blob], `${i + 1}.jpg`, { type: 'image/jpeg' }));
+			// 自动分篇：额外生成小缩略图，只用于「分组+排序」推断（无需 OCR 级分辨率），
+			// 大幅降低一次性多图调用的 token 压力；正文仍用上面的全分辨率图识别。
+			if (autoSplit.value) {
+				const thumb = await compressImage(item.file, 1024, 0.6, item.rotation);
+				form.append('segThumbs', new File([thumb], `${i + 1}.jpg`, { type: 'image/jpeg' }));
+			}
 		}
 		if (autoSplit.value) {
 			progress.value = 'AI 正在按页码与语义分篇…';

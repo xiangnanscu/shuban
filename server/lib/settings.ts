@@ -17,7 +17,7 @@ export async function deleteSetting(db: D1Database, key: string): Promise<void> 
 }
 
 /** 家长区可配置的识别引擎，wrangler vars OCR_PROVIDER 中出现的顺序即默认降级顺序 */
-export const AI_PROVIDERS = ['gemini', 'workersai', 'claude'] as const;
+export const AI_PROVIDERS = ['gemini', 'workersai', 'claude', 'mimo'] as const;
 export type AiProviderName = (typeof AI_PROVIDERS)[number];
 
 export interface AiSettings {
@@ -26,6 +26,7 @@ export interface AiSettings {
 	geminiModel: string | null;
 	workersaiModel: string | null;
 	claudeModel: string | null;
+	mimoModel: string | null;
 	timeoutMs: number | null;
 }
 
@@ -34,15 +35,17 @@ const AI_KEY = {
 	geminiModel: 'ai_gemini_model',
 	workersaiModel: 'ai_workersai_model',
 	claudeModel: 'ai_claude_model',
+	mimoModel: 'ai_mimo_model',
 	timeoutMs: 'ai_timeout_ms',
 } as const satisfies Record<keyof AiSettings, string>;
 
 export async function getAiSettings(db: D1Database): Promise<AiSettings> {
-	const [primaryProvider, geminiModel, workersaiModel, claudeModel, timeoutMs] = await Promise.all([
+	const [primaryProvider, geminiModel, workersaiModel, claudeModel, mimoModel, timeoutMs] = await Promise.all([
 		getSetting(db, AI_KEY.primaryProvider),
 		getSetting(db, AI_KEY.geminiModel),
 		getSetting(db, AI_KEY.workersaiModel),
 		getSetting(db, AI_KEY.claudeModel),
+		getSetting(db, AI_KEY.mimoModel),
 		getSetting(db, AI_KEY.timeoutMs),
 	]);
 	return {
@@ -52,6 +55,7 @@ export async function getAiSettings(db: D1Database): Promise<AiSettings> {
 		geminiModel,
 		workersaiModel,
 		claudeModel,
+		mimoModel,
 		timeoutMs: timeoutMs && Number(timeoutMs) > 0 ? Number(timeoutMs) : null,
 	};
 }
@@ -78,6 +82,7 @@ export function applyAiSettings(env: Bindings, s: AiSettings): Bindings {
 		GEMINI_MODEL: s.geminiModel || env.GEMINI_MODEL,
 		WORKERSAI_MODEL: s.workersaiModel || env.WORKERSAI_MODEL,
 		CLAUDE_MODEL: s.claudeModel || env.CLAUDE_MODEL,
+		MIMO_MODEL: s.mimoModel || env.MIMO_MODEL,
 		OCR_TIMEOUT_MS: s.timeoutMs ? String(s.timeoutMs) : env.OCR_TIMEOUT_MS,
 	};
 }

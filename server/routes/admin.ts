@@ -22,6 +22,7 @@ async function aiSettingsPayload(env: Bindings) {
 		geminiModel: s.geminiModel,
 		workersaiModel: s.workersaiModel,
 		claudeModel: s.claudeModel,
+		mimoModel: s.mimoModel,
 		timeoutMs: s.timeoutMs,
 		defaults: {
 			providerOrder: env.OCR_PROVIDER.split(',')
@@ -30,6 +31,7 @@ async function aiSettingsPayload(env: Bindings) {
 			geminiModel: env.GEMINI_MODEL,
 			workersaiModel: env.WORKERSAI_MODEL,
 			claudeModel: env.CLAUDE_MODEL,
+			mimoModel: env.MIMO_MODEL,
 			timeoutMs: getProviderTimeoutMs(env),
 		},
 	};
@@ -310,6 +312,7 @@ export const adminRoutes = new Hono<AppEnv>()
 				geminiModel?: string | null;
 				workersaiModel?: string | null;
 				claudeModel?: string | null;
+				mimoModel?: string | null;
 				timeoutMs?: number | string | null;
 			}>()
 			.catch(() => null);
@@ -333,6 +336,7 @@ export const adminRoutes = new Hono<AppEnv>()
 			...(body.geminiModel !== undefined && { geminiModel: body.geminiModel?.trim() || null }),
 			...(body.workersaiModel !== undefined && { workersaiModel: body.workersaiModel?.trim() || null }),
 			...(body.claudeModel !== undefined && { claudeModel: body.claudeModel?.trim() || null }),
+			...(body.mimoModel !== undefined && { mimoModel: body.mimoModel?.trim() || null }),
 			...(timeoutStr !== undefined && { timeoutMs: timeoutStr }),
 		});
 		return c.json(ok(await aiSettingsPayload(c.env)));

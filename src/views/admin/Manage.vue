@@ -11,13 +11,19 @@ const showPinForm = ref(false);
 const oldPin = ref('');
 const newPin = ref('');
 
-const PROVIDER_LABEL: Record<AiProviderName, string> = { gemini: 'Gemini', workersai: 'Workers AI', claude: 'Claude' };
+const PROVIDER_LABEL: Record<AiProviderName, string> = {
+	gemini: 'Gemini',
+	workersai: 'Workers AI',
+	claude: 'Claude',
+	mimo: 'MiMo',
+};
 const showAiForm = ref(false);
 const ai = ref<AiSettings | null>(null);
 const aiPrimaryProvider = ref<AiProviderName | ''>('');
 const aiGeminiModel = ref('');
 const aiWorkersaiModel = ref('');
 const aiClaudeModel = ref('');
+const aiMimoModel = ref('');
 const aiTimeoutMs = ref('');
 
 async function loadAiSettings() {
@@ -26,6 +32,7 @@ async function loadAiSettings() {
 	aiGeminiModel.value = ai.value.geminiModel ?? '';
 	aiWorkersaiModel.value = ai.value.workersaiModel ?? '';
 	aiClaudeModel.value = ai.value.claudeModel ?? '';
+	aiMimoModel.value = ai.value.mimoModel ?? '';
 	aiTimeoutMs.value = ai.value.timeoutMs ? String(ai.value.timeoutMs) : '';
 }
 
@@ -44,6 +51,7 @@ async function saveAiSettings() {
 				geminiModel: aiGeminiModel.value.trim() || null,
 				workersaiModel: aiWorkersaiModel.value.trim() || null,
 				claudeModel: aiClaudeModel.value.trim() || null,
+				mimoModel: aiMimoModel.value.trim() || null,
 				timeoutMs: String(aiTimeoutMs.value ?? '').trim() || null,
 			}),
 		});
@@ -146,6 +154,10 @@ async function logout() {
 			<label>
 				Claude 模型
 				<input v-model="aiClaudeModel" type="text" :placeholder="ai.defaults.claudeModel" />
+			</label>
+			<label>
+				MiMo 模型
+				<input v-model="aiMimoModel" type="text" :placeholder="ai.defaults.mimoModel" />
 			</label>
 			<label>
 				单次识别超时（毫秒）

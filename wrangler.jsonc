@@ -34,10 +34,11 @@
 		"consumers": [{ "queue": "shuban-ocr", "max_batch_size": 3, "max_batch_timeout": 2, "max_retries": 2 }]
 	},
 	"vars": {
-		"OCR_PROVIDER": "gemini,workersai,claude",
+		"OCR_PROVIDER": "gemini,workersai,claude,mimo",
 		"GEMINI_MODEL": "gemini-flash-latest",
 		"WORKERSAI_MODEL": "@cf/meta/llama-3.2-11b-vision-instruct",
 		"CLAUDE_MODEL": "claude-opus-4-8",
+		"MIMO_MODEL": "mimo-v2.5",
 		"OCR_TIMEOUT_MS": "30000"
 	}
 }

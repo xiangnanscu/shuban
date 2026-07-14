@@ -7,17 +7,19 @@ export interface OcrMessage {
 // secrets 与 queue 绑定不在生成范围内，这里补充声明。
 export type Bindings = Omit<
 	Env,
-	'OCR_PROVIDER' | 'OCR_TIMEOUT_MS' | 'GEMINI_MODEL' | 'WORKERSAI_MODEL' | 'CLAUDE_MODEL'
+	'OCR_PROVIDER' | 'OCR_TIMEOUT_MS' | 'GEMINI_MODEL' | 'WORKERSAI_MODEL' | 'CLAUDE_MODEL' | 'MIMO_MODEL'
 > & {
-	/** 逗号分隔的 provider 优先级链，如 "gemini,workersai,claude"；家长区可在 settings 表覆盖，见 lib/settings.ts */
+	/** 逗号分隔的 provider 优先级链，如 "gemini,workersai,claude,mimo"；家长区可在 settings 表覆盖，见 lib/settings.ts */
 	OCR_PROVIDER: string;
 	/** 单个 OCR provider 尝试的超时（毫秒），字符串形式，见 wrangler.jsonc vars，同样可被家长区覆盖 */
 	OCR_TIMEOUT_MS: string;
 	GEMINI_MODEL: string;
 	WORKERSAI_MODEL: string;
 	CLAUDE_MODEL: string;
+	MIMO_MODEL: string;
 	GEMINI_API_KEY: string;
 	ANTHROPIC_API_KEY: string;
+	MIMO_KEY: string;
 	SESSION_SECRET: string;
 	/** OCR 任务队列：建文章/重识别时投递每页，由 Worker 的 queue 消费者后台识别，不依赖请求或浏览器 */
 	OCR_QUEUE: Queue<OcrMessage>;

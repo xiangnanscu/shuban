@@ -106,19 +106,21 @@ export interface ReadingPlan {
 	uncovered: string[];
 }
 
-export type AiProviderName = 'gemini' | 'workersai' | 'claude';
+export type AiProviderName = 'gemini' | 'workersai' | 'claude' | 'mimo';
 
 export interface AiSettings {
 	primaryProvider: AiProviderName | null;
 	geminiModel: string | null;
 	workersaiModel: string | null;
 	claudeModel: string | null;
+	mimoModel: string | null;
 	timeoutMs: number | null;
 	defaults: {
 		providerOrder: AiProviderName[];
 		geminiModel: string;
 		workersaiModel: string;
 		claudeModel: string;
+		mimoModel: string;
 		timeoutMs: number;
 	};
 }

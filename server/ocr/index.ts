@@ -1,6 +1,7 @@
 import type { Bindings } from '../env';
 import { claudeProvider } from './claude';
 import { geminiProvider } from './gemini';
+import { mimoProvider } from './mimo';
 import type { OcrProvider } from './types';
 import { workersAiProvider } from './workersai';
 
@@ -36,6 +37,8 @@ function makeProvider(name: string, env: Bindings): OcrProvider {
 			return workersAiProvider(env.AI, env.WORKERSAI_MODEL);
 		case 'claude':
 			return claudeProvider(env.ANTHROPIC_API_KEY, env.CLAUDE_MODEL);
+		case 'mimo':
+			return mimoProvider(env.MIMO_KEY, env.MIMO_MODEL);
 		default:
 			throw new Error(`未知 OCR provider: ${name}`);
 	}

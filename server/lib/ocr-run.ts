@@ -12,7 +12,7 @@ interface PageRow {
 /** 单个 provider 尝试超时的默认值（毫秒）；可通过 OCR_TIMEOUT_MS 环境变量覆盖 */
 const DEFAULT_PROVIDER_TIMEOUT_MS = 30_000;
 
-function getProviderTimeoutMs(env: Bindings): number {
+export function getProviderTimeoutMs(env: Bindings): number {
 	const n = Number(env.OCR_TIMEOUT_MS);
 	return Number.isFinite(n) && n > 0 ? n : DEFAULT_PROVIDER_TIMEOUT_MS;
 }

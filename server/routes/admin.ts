@@ -4,6 +4,7 @@ import type { AppEnv } from '../env';
 import { err, ok } from '../env';
 import { adminAuth, createSessionToken, currentPinVersion, hashPin, randomSaltHex, SESSION_COOKIE } from '../lib/auth';
 import { runOcrForPage } from '../lib/ocr-run';
+import { segmentImages } from '../ocr/segment';
 import { getSetting, setSetting } from '../lib/settings';
 import { timingSafeEqual } from '../lib/bytes';
 import type { PageLine } from '../ocr';
@@ -49,6 +50,48 @@ export const adminRoutes = new Hono<AppEnv>()
 			c.executionCtx.waitUntil(runOcrForPage(c.env, pid));
 		}
 		return c.json(ok({ articleId }));
+	})
+
+	// AI 自动分篇建文章：multipart images[]（可能跨多篇）→ AI 按页码/语义/版式推断分组 → 一次建 1~N 篇 draft
+	.post('/articles/batch', async (c) => {
+		const form = await c.req.raw.formData();
+		const files = form.getAll('images').filter((f): f is File => f instanceof File);
+		if (files.length === 0) return c.json(err('no_images', '未收到图片'), 400);
+		if (files.length > MAX_IMAGES) return c.json(err('too_many', `最多 ${MAX_IMAGES} 张`), 400);
+		for (const f of files) {
+			if (!IMAGE_TYPES.has(f.type)) return c.json(err('bad_type', `不支持的图片类型 ${f.type}`), 400);
+			if (f.size > MAX_IMAGE_BYTES) return c.json(err('too_large', '单张图片需 ≤8MB'), 400);
+		}
+
+		const buffers = await Promise.all(files.map((f) => f.arrayBuffer()));
+		const groups = await segmentImages(c.env, buffers);
+
+		const created: { articleId: number; title: string; pageCount: number }[] = [];
+		for (const g of groups) {
+			const title = g.title ?? '';
+			const ins = await c.env.DB.prepare('INSERT INTO articles (title) VALUES (?1)').bind(title).run();
+			const articleId = ins.meta.last_row_id;
+
+			const pageIds: number[] = [];
+			for (let pn = 0; pn < g.pages.length; pn++) {
+				const idx = g.pages[pn];
+				const key = `img/${articleId}/${pn + 1}.jpg`;
+				await c.env.BUCKET.put(key, buffers[idx], { httpMetadata: { contentType: files[idx].type } });
+				const p = await c.env.DB.prepare('INSERT INTO pages (article_id, page_no, image_key) VALUES (?1, ?2, ?3)')
+					.bind(articleId, pn + 1, key)
+					.run();
+				pageIds.push(p.meta.last_row_id);
+			}
+			await c.env.DB.prepare('UPDATE articles SET cover_key = ?1 WHERE id = ?2')
+				.bind(`img/${articleId}/1.jpg`, articleId)
+				.run();
+
+			for (const pid of pageIds) {
+				c.executionCtx.waitUntil(runOcrForPage(c.env, pid));
+			}
+			created.push({ articleId, title, pageCount: g.pages.length });
+		}
+		return c.json(ok({ articles: created }));
 	})
 
 	// 单页替换原图（校对时修正拍歪/拍倒），替换后自动重新识别

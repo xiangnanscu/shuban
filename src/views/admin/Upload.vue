@@ -8,10 +8,12 @@ type Rotation = 0 | 90 | 180 | 270;
 
 const router = useRouter();
 const title = ref('');
+const autoSplit = ref(false);
 const files = ref<{ file: File; url: string; rotation: Rotation }[]>([]);
 const busy = ref(false);
 const progress = ref('');
 const msg = ref('');
+const results = ref<{ articleId: number; title: string; pageCount: number }[]>([]);
 
 function onPick(e: Event) {
 	const input = e.target as HTMLInputElement;
@@ -42,17 +44,34 @@ async function submit() {
 	}
 	busy.value = true;
 	msg.value = '';
+	results.value = [];
 	try {
 		const form = new FormData();
-		form.set('title', title.value.trim());
+		if (!autoSplit.value) form.set('title', title.value.trim());
 		for (const [i, item] of files.value.entries()) {
 			progress.value = `压缩图片 ${i + 1}/${files.value.length}…`;
 			const blob = await compressImage(item.file, 1568, 0.85, item.rotation);
 			form.append('images', new File([blob], `${i + 1}.jpg`, { type: 'image/jpeg' }));
 		}
-		progress.value = '上传并开始识别…';
-		const { articleId } = await api<{ articleId: number }>('/api/admin/articles', { method: 'POST', body: form });
-		void router.push(`/admin/proofread/${articleId}`);
+		if (autoSplit.value) {
+			progress.value = 'AI 正在按页码与语义分篇…';
+			const { articles } = await api<{ articles: typeof results.value }>('/api/admin/articles/batch', {
+				method: 'POST',
+				body: form,
+			});
+			const first = articles[0];
+			if (articles.length === 1 && first) {
+				void router.push(`/admin/proofread/${first.articleId}`);
+				return;
+			}
+			results.value = articles;
+			for (const item of files.value) URL.revokeObjectURL(item.url);
+			files.value = [];
+		} else {
+			progress.value = '上传并开始识别…';
+			const { articleId } = await api<{ articleId: number }>('/api/admin/articles', { method: 'POST', body: form });
+			void router.push(`/admin/proofread/${articleId}`);
+		}
 	} catch (e) {
 		msg.value = e instanceof ApiError ? e.message : '上传失败，请重试';
 	} finally {
@@ -65,30 +84,64 @@ async function submit() {
 <template>
 	<div class="wrap">
 		<h1>上传绘本</h1>
-		<p class="hint">按阅读顺序选择页面照片（一张照片 = 一页），上传后自动识别文字与拼音。</p>
 
-		<input v-model="title" type="text" placeholder="标题（可留空，识别第一页时自动提取）" />
-
-		<label class="picker btn ghost">
-			📷 拍照 / 选图（可多选）
-			<input type="file" accept="image/*" multiple hidden @change="onPick" />
-		</label>
-
-		<div v-if="files.length" class="thumbs">
-			<div v-for="(f, i) in files" :key="f.url" class="thumb">
-				<img :src="f.url" :style="{ transform: `rotate(${f.rotation}deg)` }" alt="" />
-				<span class="no">{{ i + 1 }}</span>
-				<button type="button" class="rotate" aria-label="旋转" @click="rotateAt(i)">↻</button>
-				<button type="button" class="rm" aria-label="移除" @click="removeAt(i)">✕</button>
+		<div v-if="results.length" class="results">
+			<p class="ok">✅ AI 识别为 {{ results.length }} 篇文章，已建为草稿，请逐篇校对后发布：</p>
+			<ul>
+				<li v-for="r in results" :key="r.articleId">
+					<RouterLink class="btn ghost small" :to="`/admin/proofread/${r.articleId}`">
+						校对《{{ r.title || '未命名' }}》（{{ r.pageCount }} 页）
+					</RouterLink>
+				</li>
+			</ul>
+			<div class="rowbtns">
+				<button type="button" class="btn ghost" @click="results = []">继续上传</button>
+				<RouterLink to="/admin" class="btn">返回家长区</RouterLink>
 			</div>
 		</div>
 
-		<button type="button" class="btn" :disabled="busy || files.length === 0" @click="submit">
-			{{ busy ? progress || '处理中…' : `上传 ${files.length} 页并识别` }}
-		</button>
-		<p v-if="msg" class="err">{{ msg }}</p>
+		<template v-else>
+			<div class="modes">
+				<label :class="['mode', { on: !autoSplit }]">
+					<input v-model="autoSplit" type="radio" :value="false" />
+					单篇上传
+				</label>
+				<label :class="['mode', { on: autoSplit }]">
+					<input v-model="autoSplit" type="radio" :value="true" />
+					AI 自动分篇
+				</label>
+			</div>
+			<p class="hint">
+				{{
+					autoSplit
+						? '一次上传多篇文章的所有页面（顺序可乱），AI 会按页码、语义衔接、版式自动分组并排序，一次建成多篇草稿。'
+						: '按阅读顺序选择同一篇文章的页面照片（一张照片 = 一页），上传后自动识别文字与拼音。'
+				}}
+			</p>
 
-		<RouterLink to="/admin" class="back">‹ 返回家长区</RouterLink>
+			<input v-if="!autoSplit" v-model="title" type="text" placeholder="标题（可留空，识别第一页时自动提取）" />
+
+			<label class="picker btn ghost">
+				📷 拍照 / 选图（可多选）
+				<input type="file" accept="image/*" multiple hidden @change="onPick" />
+			</label>
+
+			<div v-if="files.length" class="thumbs">
+				<div v-for="(f, i) in files" :key="f.url" class="thumb">
+					<img :src="f.url" :style="{ transform: `rotate(${f.rotation}deg)` }" alt="" />
+					<span class="no">{{ i + 1 }}</span>
+					<button type="button" class="rotate" aria-label="旋转" @click="rotateAt(i)">↻</button>
+					<button type="button" class="rm" aria-label="移除" @click="removeAt(i)">✕</button>
+				</div>
+			</div>
+
+			<button type="button" class="btn" :disabled="busy || files.length === 0" @click="submit">
+				{{ busy ? progress || '处理中…' : autoSplit ? `上传 ${files.length} 张并自动分篇` : `上传 ${files.length} 页并识别` }}
+			</button>
+			<p v-if="msg" class="err">{{ msg }}</p>
+
+			<RouterLink to="/admin" class="back">‹ 返回家长区</RouterLink>
+		</template>
 	</div>
 </template>
 
@@ -171,6 +224,52 @@ h1 {
 	color: #9a8a70;
 	font-size: 14px;
 	margin: 0;
+}
+.modes {
+	display: flex;
+	gap: 8px;
+}
+.mode {
+	flex: 1;
+	text-align: center;
+	padding: 10px;
+	border: 2px solid #eadfca;
+	border-radius: 10px;
+	cursor: pointer;
+	font-size: 15px;
+	color: #9a8a70;
+}
+.mode.on {
+	border-color: var(--accent);
+	color: var(--accent);
+	font-weight: 600;
+	background: #fff8ec;
+}
+.mode input {
+	display: none;
+}
+.results {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+.results .ok {
+	color: var(--accent);
+	font-weight: 600;
+	margin: 0;
+}
+.results ul {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.rowbtns {
+	display: flex;
+	gap: 10px;
+	margin-top: 6px;
 }
 .back {
 	margin-top: 16px;

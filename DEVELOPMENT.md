@@ -359,6 +359,7 @@ Base：同域 `/api`。响应统一 `{ ok: true, data }` 或 `{ ok: false, error
 | POST | `/api/auth/login` | `{pin}` → 校验 PBKDF2 哈希 → `Set-Cookie: session=<HMAC签名, 7天>` |
 | POST | `/api/auth/logout` | 清 cookie |
 | POST | `/api/admin/articles` | multipart：`images[]`（已压缩 JPEG）→ 建 draft 文章 + pages（存 R2）→ **逐页异步触发 OCR** → 返回 `{articleId}`；前端轮询 `GET /api/articles/:id` 看 `ocr_status` |
+| POST | `/api/admin/articles/batch` | multipart：`images[]`（可能跨多篇、顺序打乱）→ **AI 分篇**（§7.7，同步）推断分组与页序 → 一次建 1~N 篇 draft 文章 + pages → 逐页异步触发 OCR → 返回 `{articles:[{articleId,title,pageCount}]}` |
 | POST | `/api/admin/pages/:id/ocr` | 重跑单页 OCR；`?hires=1` 用原图重跑 |
 | POST | `/api/admin/pages/:id/image` | multipart：`image`（替换原图，如校对时修正拍歪/拍倒）→ 覆盖 R2 对象、`image_version+1`、`ocr_status='pending'` 并自动重新识别 |
 | PUT | `/api/admin/articles/:id` | 更新 `title` / `status` / 各页 `content_json`（校对保存） |
@@ -531,6 +532,16 @@ return JSON.parse(text) as PageContent;
 - 即原 §7.2 实现，需 `ANTHROPIC_API_KEY`。质量最高、成本也最高，适合作为链尾对付前两家都识别失败的疑难页。
 
 模型均可换：vars `GEMINI_MODEL` / `WORKERSAI_MODEL` / `CLAUDE_MODEL`。
+
+### 7.7 AI 分篇（多图 → 多篇，2026-07-14）
+
+家长可一次性上传多篇文章、顺序打乱的所有页面，AI 自行推断分组与页序，一次建成多篇草稿。与逐页 OCR 是两件事：**分篇只做「分组 + 排序」，不转写正文**。
+
+- **实现**：`server/ocr/segment.ts` 的 `segmentImages(env, images)`。一次调用把**全部图片**发给模型（每张图前用文字标出 `index N`），要求返回 `articles:[{title, pages:[index...]}]`——`pages` 是上传下标的阅读顺序。判断依据：页码（页眉页脚数字）、新标题出现、语义衔接、版式/插图风格。
+- **引擎链**：复用 `OCR_PROVIDER` 顺序，但只取 **gemini / claude**（多图整篇推理需要，Kimi 多图推理不稳，跳过）。超时取 `OCR_TIMEOUT_MS × 2`（多图比单页重）。Gemini 用 `responseSchema`、Claude 用 `output_config` json_schema，与 §7.2/§7.6 同构。
+- **健壮性**：`normalizeGroups` 保证每个下标恰好出现一次、无越界；模型漏分的图就近并入最后一篇，绝不丢弃。全部引擎失败 / 无可用 key → **退化为「所有图按上传顺序合成一篇」**，绝不阻断建文章。单图直接单篇、不调模型。
+- **执行位置**：分篇在 `POST /api/admin/articles/batch` 的 handler 内**同步**完成（需要分组结果才能建文章），随后每页 OCR 仍走 `waitUntil` 异步。分篇未给出的标题由第 1 页 OCR 的 `title` 兜底（`UPDATE ... WHERE title=''`）。
+- **前端**：`Upload.vue` 增「单篇上传 / AI 自动分篇」切换；分篇模式隐藏标题输入，提交后：单篇结果直接进校对页，多篇结果列出各篇《标题》(N 页) 的校对入口。
 
 ---
 

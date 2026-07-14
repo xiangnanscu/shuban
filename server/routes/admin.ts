@@ -113,7 +113,7 @@ export const adminRoutes = new Hono<AppEnv>()
 
 		await c.env.BUCKET.put(row.image_key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
 		const imageVersion = row.image_version + 1;
-		await c.env.DB.prepare("UPDATE pages SET image_version = ?1, ocr_status = 'pending' WHERE id = ?2")
+		await c.env.DB.prepare("UPDATE pages SET image_version = ?1, ocr_status = 'pending', ocr_error = NULL WHERE id = ?2")
 			.bind(imageVersion, pageId)
 			.run();
 		await c.env.OCR_QUEUE.send({ pageId });
@@ -124,7 +124,7 @@ export const adminRoutes = new Hono<AppEnv>()
 	.post('/pages/:id/ocr', async (c) => {
 		const pageId = Number(c.req.param('id'));
 		if (!Number.isInteger(pageId)) return c.json(err('bad_id', '无效 id'), 400);
-		const row = await c.env.DB.prepare("UPDATE pages SET ocr_status = 'pending' WHERE id = ?1 RETURNING id")
+		const row = await c.env.DB.prepare("UPDATE pages SET ocr_status = 'pending', ocr_error = NULL WHERE id = ?1 RETURNING id")
 			.bind(pageId)
 			.first();
 		if (!row) return c.json(err('not_found', '页不存在'), 404);

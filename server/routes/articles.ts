@@ -19,6 +19,7 @@ interface PageRow {
 	image_key: string;
 	image_version: number;
 	ocr_status: string;
+	ocr_error: string | null;
 	content_json: string;
 }
 
@@ -64,7 +65,7 @@ export const articleRoutes = new Hono<AppEnv>()
 		}
 
 		const { results: pages } = await c.env.DB.prepare(
-			'SELECT id, page_no, image_key, image_version, ocr_status, content_json FROM pages WHERE article_id = ?1 ORDER BY page_no',
+			'SELECT id, page_no, image_key, image_version, ocr_status, ocr_error, content_json FROM pages WHERE article_id = ?1 ORDER BY page_no',
 		)
 			.bind(id)
 			.all<PageRow>();
@@ -93,6 +94,7 @@ export const articleRoutes = new Hono<AppEnv>()
 					pageNo: p.page_no,
 					imageUrl: `/api/files/${p.image_key}?v=${p.image_version}`,
 					ocrStatus: p.ocr_status,
+					ocrError: p.ocr_error,
 					content: JSON.parse(p.content_json) as { lines: unknown[] },
 				})),
 			}),

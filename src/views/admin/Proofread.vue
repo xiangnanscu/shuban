@@ -50,6 +50,7 @@ async function load(initial = false) {
 		} else if (local.ocrStatus === 'pending') {
 			// 只覆盖仍在识别中的页，避免轮询冲掉本地已做的修改
 			local.ocrStatus = p.ocrStatus;
+			local.ocrError = p.ocrError;
 			local.content = p.content;
 			if (p.ocrStatus !== 'pending') delete pendingSince[p.id];
 		}
@@ -163,10 +164,15 @@ async function save(publish = false) {
 	}
 }
 
+function showOcrError(page: ArticlePage) {
+	window.alert(page.ocrError || '未知错误');
+}
+
 async function reOcr(page: ArticlePage) {
 	if (!confirm('重新识别会覆盖这一页当前的文字（含手动修改），继续？')) return;
 	await api(`/api/admin/pages/${page.id}/ocr`, { method: 'POST' });
 	page.ocrStatus = 'pending';
+	page.ocrError = null;
 	page.content = { lines: [] };
 	pendingSince[page.id] = Date.now();
 	syncPolling();
@@ -197,6 +203,7 @@ async function applyRotation(page: ArticlePage) {
 		});
 		page.imageUrl = imageUrl;
 		page.ocrStatus = 'pending';
+		page.ocrError = null;
 		page.content = { lines: [] };
 		pendingSince[page.id] = Date.now();
 		rotatePreview[page.id] = 0;
@@ -225,7 +232,11 @@ async function applyRotation(page: ArticlePage) {
 		<section v-for="(page, pi) in pages" :key="page.id" class="pagecard">
 			<header class="pagehead">
 				<strong>第 {{ page.pageNo }} 页</strong>
-				<span class="chip" :class="page.ocrStatus">
+				<span
+					class="chip"
+					:class="[page.ocrStatus, { clickable: page.ocrStatus === 'failed' }]"
+					@click="page.ocrStatus === 'failed' && showOcrError(page)"
+				>
 					{{ page.ocrStatus === 'pending' ? '识别中…' : page.ocrStatus === 'failed' ? '识别失败' : '已识别' }}
 				</span>
 				<span class="grow" />
@@ -273,7 +284,13 @@ async function applyRotation(page: ArticlePage) {
 			<p v-else-if="page.ocrStatus === 'pending' && isStuck(page)" class="hint fail">
 				识别耗时较长，可能已卡住，可点"卡住了？重新识别"重试，或删除本篇重拍。
 			</p>
-			<p v-else-if="page.ocrStatus === 'failed'" class="hint fail">识别失败：图片可能过长或模糊，可点"重新识别"或删除本篇重拍。</p>
+			<p
+				v-else-if="page.ocrStatus === 'failed'"
+				class="hint fail clickable"
+				@click="showOcrError(page)"
+			>
+				识别失败（点此查看详情）：可点"重新识别"或删除本篇重拍。
+			</p>
 
 			<div v-for="(line, li) in page.content.lines" :key="li" class="linebox">
 				<div class="linetools">
@@ -448,5 +465,9 @@ async function applyRotation(page: ArticlePage) {
 }
 .hint.fail {
 	color: var(--danger);
+}
+.clickable {
+	cursor: pointer;
+	text-decoration: underline dotted;
 }
 </style>

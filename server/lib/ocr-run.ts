@@ -71,7 +71,7 @@ export async function runOcrForPage(env: Bindings, pageId: number): Promise<void
 		}
 		if (!content) throw new Error(errors.join(' | '));
 
-		await env.DB.prepare("UPDATE pages SET content_json = ?1, ocr_status = 'done' WHERE id = ?2")
+		await env.DB.prepare("UPDATE pages SET content_json = ?1, ocr_status = 'done', ocr_error = NULL WHERE id = ?2")
 			.bind(JSON.stringify({ lines: content.lines }), page.id)
 			.run();
 
@@ -81,7 +81,10 @@ export async function runOcrForPage(env: Bindings, pageId: number): Promise<void
 				.run();
 		}
 	} catch (e) {
-		console.error(`OCR failed for page ${pageId}:`, e instanceof Error ? e.message : e);
-		await env.DB.prepare("UPDATE pages SET ocr_status = 'failed' WHERE id = ?1").bind(pageId).run();
+		const detail = e instanceof Error ? e.message : String(e);
+		console.error(`OCR failed for page ${pageId}:`, detail);
+		await env.DB.prepare("UPDATE pages SET ocr_status = 'failed', ocr_error = ?1 WHERE id = ?2")
+			.bind(detail, pageId)
+			.run();
 	}
 }

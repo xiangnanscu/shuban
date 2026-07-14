@@ -22,6 +22,7 @@ export interface ArticlePage {
 	pageNo: number;
 	imageUrl: string;
 	ocrStatus: 'pending' | 'done' | 'failed';
+	ocrError: string | null;
 	content: { lines: PageLine[] };
 }
 

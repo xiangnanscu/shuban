@@ -25,6 +25,7 @@ const aiWorkersaiModel = ref('');
 const aiClaudeModel = ref('');
 const aiMimoModel = ref('');
 const aiTimeoutMs = ref('');
+const aiSegCompress = ref(true);
 
 async function loadAiSettings() {
 	ai.value = await api<AiSettings>('/api/admin/settings/ai');
@@ -34,6 +35,7 @@ async function loadAiSettings() {
 	aiClaudeModel.value = ai.value.claudeModel ?? '';
 	aiMimoModel.value = ai.value.mimoModel ?? '';
 	aiTimeoutMs.value = ai.value.timeoutMs ? String(ai.value.timeoutMs) : '';
+	aiSegCompress.value = ai.value.segCompress;
 }
 
 async function toggleAiForm() {
@@ -53,6 +55,7 @@ async function saveAiSettings() {
 				claudeModel: aiClaudeModel.value.trim() || null,
 				mimoModel: aiMimoModel.value.trim() || null,
 				timeoutMs: String(aiTimeoutMs.value ?? '').trim() || null,
+				segCompress: aiSegCompress.value,
 			}),
 		});
 		msg.value = 'AI 设置已保存';
@@ -164,6 +167,11 @@ async function logout() {
 				<input v-model="aiTimeoutMs" type="number" min="1" :placeholder="String(ai.defaults.timeoutMs)" />
 			</label>
 			<p class="hint small">模型 / 超时留空即用出厂默认值（Workers AI 出厂默认为 Kimi）。</p>
+			<label class="checkline">
+				<input v-model="aiSegCompress" type="checkbox" />
+				AI 自动分篇时压缩缩略图
+			</label>
+			<p class="hint small">关闭后分篇用原图分组识别，成功率更高（避免被误判为一篇），但更耗 token、更慢。</p>
 			<button class="btn small" type="submit">保存 AI 设置</button>
 		</form>
 
@@ -245,6 +253,14 @@ h1 {
 	padding: 6px 8px;
 	border: 1px solid #eadfca;
 	border-radius: 6px;
+}
+.aiform .checkline {
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+}
+.aiform .checkline input {
+	width: auto;
 }
 .hint.small {
 	font-size: 12px;

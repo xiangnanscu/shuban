@@ -115,6 +115,7 @@ export interface AiSettings {
 	claudeModel: string | null;
 	mimoModel: string | null;
 	timeoutMs: number | null;
+	segCompress: boolean;
 	defaults: {
 		providerOrder: AiProviderName[];
 		geminiModel: string;

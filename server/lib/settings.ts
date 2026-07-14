@@ -28,6 +28,8 @@ export interface AiSettings {
 	claudeModel: string | null;
 	mimoModel: string | null;
 	timeoutMs: number | null;
+	/** 自动分篇时是否压缩分组用缩略图；关闭则用原图分组，成功率更高但更耗 token/更慢 */
+	segCompress: boolean;
 }
 
 const AI_KEY = {
@@ -37,17 +39,20 @@ const AI_KEY = {
 	claudeModel: 'ai_claude_model',
 	mimoModel: 'ai_mimo_model',
 	timeoutMs: 'ai_timeout_ms',
+	segCompress: 'ai_seg_compress',
 } as const satisfies Record<keyof AiSettings, string>;
 
 export async function getAiSettings(db: D1Database): Promise<AiSettings> {
-	const [primaryProvider, geminiModel, workersaiModel, claudeModel, mimoModel, timeoutMs] = await Promise.all([
-		getSetting(db, AI_KEY.primaryProvider),
-		getSetting(db, AI_KEY.geminiModel),
-		getSetting(db, AI_KEY.workersaiModel),
-		getSetting(db, AI_KEY.claudeModel),
-		getSetting(db, AI_KEY.mimoModel),
-		getSetting(db, AI_KEY.timeoutMs),
-	]);
+	const [primaryProvider, geminiModel, workersaiModel, claudeModel, mimoModel, timeoutMs, segCompress] =
+		await Promise.all([
+			getSetting(db, AI_KEY.primaryProvider),
+			getSetting(db, AI_KEY.geminiModel),
+			getSetting(db, AI_KEY.workersaiModel),
+			getSetting(db, AI_KEY.claudeModel),
+			getSetting(db, AI_KEY.mimoModel),
+			getSetting(db, AI_KEY.timeoutMs),
+			getSetting(db, AI_KEY.segCompress),
+		]);
 	return {
 		primaryProvider: (AI_PROVIDERS as readonly string[]).includes(primaryProvider ?? '')
 			? (primaryProvider as AiProviderName)
@@ -57,6 +62,7 @@ export async function getAiSettings(db: D1Database): Promise<AiSettings> {
 		claudeModel,
 		mimoModel,
 		timeoutMs: timeoutMs && Number(timeoutMs) > 0 ? Number(timeoutMs) : null,
+		segCompress: segCompress !== '0',
 	};
 }
 

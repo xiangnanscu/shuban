@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api, ApiError } from '@/composables/useApi';
 import { compressImage } from '@/lib/compressImage';
-import type { ArticleDetail } from '@/types';
+import type { AiSettings, ArticleDetail } from '@/types';
 
 type Rotation = 0 | 90 | 180 | 270;
 type OcrStatus = 'pending' | 'done' | 'failed';
@@ -26,6 +26,16 @@ const files = ref<{ file: File; url: string; rotation: Rotation }[]>([]);
 const busy = ref(false);
 const progress = ref('');
 const msg = ref('');
+const segCompress = ref(true);
+
+onMounted(async () => {
+	try {
+		const s = await api<AiSettings>('/api/admin/settings/ai');
+		segCompress.value = s.segCompress;
+	} catch {
+		// 拿不到设置就沿用默认（压缩）
+	}
+});
 
 // —— 分篇后的识别进度（自动识别到全部完成，无需人工确认）——
 const results = ref<BatchArticle[]>([]);
@@ -81,7 +91,8 @@ async function submit() {
 			form.append('images', new File([blob], `${i + 1}.jpg`, { type: 'image/jpeg' }));
 			// 自动分篇：额外生成小缩略图，只用于「分组+排序」推断（无需 OCR 级分辨率），
 			// 大幅降低一次性多图调用的 token 压力；正文仍用上面的全分辨率图识别。
-			if (autoSplit.value) {
+			// 家长关闭「分篇时压缩」后不传缩略图，服务端会退回用全分辨率图分组，牺牲 token/速度换成功率。
+			if (autoSplit.value && segCompress.value) {
 				const thumb = await compressImage(item.file, 1024, 0.6, item.rotation);
 				form.append('segThumbs', new File([thumb], `${i + 1}.jpg`, { type: 'image/jpeg' }));
 			}

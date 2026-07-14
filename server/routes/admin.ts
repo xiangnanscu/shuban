@@ -24,6 +24,7 @@ async function aiSettingsPayload(env: Bindings) {
 		claudeModel: s.claudeModel,
 		mimoModel: s.mimoModel,
 		timeoutMs: s.timeoutMs,
+		segCompress: s.segCompress,
 		defaults: {
 			providerOrder: env.OCR_PROVIDER.split(',')
 				.map((x) => x.trim())
@@ -314,6 +315,7 @@ export const adminRoutes = new Hono<AppEnv>()
 				claudeModel?: string | null;
 				mimoModel?: string | null;
 				timeoutMs?: number | string | null;
+				segCompress?: boolean | null;
 			}>()
 			.catch(() => null);
 		if (!body) return c.json(err('bad_body', '请求体不是 JSON'), 400);
@@ -338,6 +340,7 @@ export const adminRoutes = new Hono<AppEnv>()
 			...(body.claudeModel !== undefined && { claudeModel: body.claudeModel?.trim() || null }),
 			...(body.mimoModel !== undefined && { mimoModel: body.mimoModel?.trim() || null }),
 			...(timeoutStr !== undefined && { timeoutMs: timeoutStr }),
+			...(body.segCompress !== undefined && { segCompress: body.segCompress === false ? '0' : null }),
 		});
 		return c.json(ok(await aiSettingsPayload(c.env)));
 	})

@@ -36,7 +36,7 @@
 	"vars": {
 		"OCR_PROVIDER": "gemini,workersai,claude",
 		"GEMINI_MODEL": "gemini-flash-latest",
-		"WORKERSAI_MODEL": "@cf/moonshotai/kimi-k2.6",
+		"WORKERSAI_MODEL": "@cf/meta/llama-3.2-11b-vision-instruct",
 		"CLAUDE_MODEL": "claude-opus-4-8",
 		"OCR_TIMEOUT_MS": "30000"
 	}

@@ -8,7 +8,11 @@ interface ChatResponse {
 	response?: string;
 }
 
-/** Workers AI 备选（默认 @cf/moonshotai/kimi-k2.6：视觉 + 结构化输出，免额外 key） */
+/**
+ * Workers AI 备选（默认 @cf/meta/llama-3.2-11b-vision-instruct，免额外 key）。
+ * 注意：必须用视觉模型，且需支持 json_schema——WAI 上二者兼备的只有此模型。
+ * 纯文本模型（如 kimi-k2.x）收到 image_url 会静默失效、无调用记录，只在超时后降级。
+ */
 export function workersAiProvider(ai: Ai, model: string): OcrProvider {
 	return {
 		async recognize(image, { isFirstPage }) {

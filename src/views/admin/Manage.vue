@@ -44,7 +44,7 @@ async function saveAiSettings() {
 				geminiModel: aiGeminiModel.value.trim() || null,
 				workersaiModel: aiWorkersaiModel.value.trim() || null,
 				claudeModel: aiClaudeModel.value.trim() || null,
-				timeoutMs: aiTimeoutMs.value.trim() || null,
+				timeoutMs: String(aiTimeoutMs.value ?? '').trim() || null,
 			}),
 		});
 		msg.value = 'AI 设置已保存';

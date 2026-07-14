@@ -542,7 +542,8 @@ return JSON.parse(text) as PageContent;
 - **引擎链**：复用 `OCR_PROVIDER` 顺序，但只取 **gemini / claude**（多图整篇推理需要，Kimi 多图推理不稳，跳过）。超时取 `OCR_TIMEOUT_MS × 2`（多图比单页重）。Gemini 用 `responseSchema`、Claude 用 `output_config` json_schema，与 §7.2/§7.6 同构。
 - **健壮性**：`normalizeGroups` 保证每个下标恰好出现一次、无越界；模型漏分的图就近并入最后一篇，绝不丢弃。全部引擎失败 / 无可用 key → **退化为「所有图按上传顺序合成一篇」**，绝不阻断建文章。单图直接单篇、不调模型。
 - **执行位置**：分篇在 `POST /api/admin/articles/batch` 的 handler 内**同步**完成（需要分组结果才能建文章），随后每页 OCR 仍走 `waitUntil` 异步。分篇未给出的标题由第 1 页 OCR 的 `title` 兜底（`UPDATE ... WHERE title=''`）。
-- **前端**：`Upload.vue` 增「单篇上传 / AI 自动分篇」切换；分篇模式隐藏标题输入，提交后：单篇结果直接进校对页，多篇结果列出各篇《标题》(N 页) 的校对入口。
+- **前端**：`Upload.vue` 增「单篇上传 / AI 自动分篇」切换；分篇模式隐藏标题输入。提交后进入**识别进度页**：轮询各篇 `GET /api/articles/:id` 展示每页识别中/已识别/失败的圆点，直到全部完成（无需人工确认，分组后自动逐篇识别）。批量接口返回 `pages:[{id,pageNo}]` 供进度页定位。
+- **卡住自愈**：服务端 `waitUntil` 在「同一次调用先做同步分篇、再排队多页 OCR」时可能被回收，导致页面永久 `pending`。进度页对 `pending` 超 90s 的页**在新请求里重触发** `POST /api/admin/pages/:id/ocr`（每页最多一次）；`failed` 页显示红点可手动重试。每次重触发都是全新 invocation、预算充足，规避回收问题。
 
 ---
 

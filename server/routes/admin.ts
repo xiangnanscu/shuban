@@ -70,13 +70,13 @@ export const adminRoutes = new Hono<AppEnv>()
 			thumbFiles.length === files.length ? await Promise.all(thumbFiles.map((f) => f.arrayBuffer())) : buffers;
 		const groups = await segmentImages(c.env, segBuffers);
 
-		const created: { articleId: number; title: string; pageCount: number }[] = [];
+		const created: { articleId: number; title: string; pages: { id: number; pageNo: number }[] }[] = [];
 		for (const g of groups) {
 			const title = g.title ?? '';
 			const ins = await c.env.DB.prepare('INSERT INTO articles (title) VALUES (?1)').bind(title).run();
 			const articleId = ins.meta.last_row_id;
 
-			const pageIds: number[] = [];
+			const pagesMeta: { id: number; pageNo: number }[] = [];
 			for (let pn = 0; pn < g.pages.length; pn++) {
 				const idx = g.pages[pn];
 				const key = `img/${articleId}/${pn + 1}.jpg`;
@@ -84,16 +84,17 @@ export const adminRoutes = new Hono<AppEnv>()
 				const p = await c.env.DB.prepare('INSERT INTO pages (article_id, page_no, image_key) VALUES (?1, ?2, ?3)')
 					.bind(articleId, pn + 1, key)
 					.run();
-				pageIds.push(p.meta.last_row_id);
+				pagesMeta.push({ id: p.meta.last_row_id, pageNo: pn + 1 });
 			}
 			await c.env.DB.prepare('UPDATE articles SET cover_key = ?1 WHERE id = ?2')
 				.bind(`img/${articleId}/1.jpg`, articleId)
 				.run();
 
-			for (const pid of pageIds) {
-				c.executionCtx.waitUntil(runOcrForPage(c.env, pid));
+			// 服务端先行触发 OCR（best-effort）；前端进度页会兜底重触发卡住的页，避免 waitUntil 被回收后永久 pending
+			for (const { id } of pagesMeta) {
+				c.executionCtx.waitUntil(runOcrForPage(c.env, id));
 			}
-			created.push({ articleId, title, pageCount: g.pages.length });
+			created.push({ articleId, title, pages: pagesMeta });
 		}
 		return c.json(ok({ articles: created }));
 	})

@@ -1,10 +1,23 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, onBeforeUnmount, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api, ApiError } from '@/composables/useApi';
 import { compressImage } from '@/lib/compressImage';
+import type { ArticleDetail } from '@/types';
 
 type Rotation = 0 | 90 | 180 | 270;
+type OcrStatus = 'pending' | 'done' | 'failed';
+
+interface BatchPage {
+	id: number;
+	pageNo: number;
+	ocrStatus: OcrStatus;
+}
+interface BatchArticle {
+	articleId: number;
+	title: string;
+	pages: BatchPage[];
+}
 
 const router = useRouter();
 const title = ref('');
@@ -13,7 +26,20 @@ const files = ref<{ file: File; url: string; rotation: Rotation }[]>([]);
 const busy = ref(false);
 const progress = ref('');
 const msg = ref('');
-const results = ref<{ articleId: number; title: string; pageCount: number }[]>([]);
+
+// —— 分篇后的识别进度（自动识别到全部完成，无需人工确认）——
+const results = ref<BatchArticle[]>([]);
+const pendingSince = reactive<Record<number, number>>({});
+const retriggered = new Set<number>();
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+// 一页 pending 超过此时长仍无结果，判为卡住（如服务端 waitUntil 被回收），前端兜底重触发一次
+const STUCK_RETRIGGER_MS = 90_000;
+
+const allDone = computed(
+	() => results.value.length > 0 && results.value.every((a) => a.pages.every((p) => p.ocrStatus !== 'pending')),
+);
+const doneCount = (a: BatchArticle) => a.pages.filter((p) => p.ocrStatus === 'done').length;
+const failedCount = (a: BatchArticle) => a.pages.filter((p) => p.ocrStatus === 'failed').length;
 
 function onPick(e: Event) {
 	const input = e.target as HTMLInputElement;
@@ -44,6 +70,7 @@ async function submit() {
 	}
 	busy.value = true;
 	msg.value = '';
+	stopPolling();
 	results.value = [];
 	try {
 		const form = new FormData();
@@ -61,18 +88,17 @@ async function submit() {
 		}
 		if (autoSplit.value) {
 			progress.value = 'AI 正在按页码与语义分篇…';
-			const { articles } = await api<{ articles: typeof results.value }>('/api/admin/articles/batch', {
-				method: 'POST',
-				body: form,
-			});
-			const first = articles[0];
-			if (articles.length === 1 && first) {
-				void router.push(`/admin/proofread/${first.articleId}`);
-				return;
-			}
-			results.value = articles;
+			const { articles } = await api<{
+				articles: { articleId: number; title: string; pages: { id: number; pageNo: number }[] }[];
+			}>('/api/admin/articles/batch', { method: 'POST', body: form });
+			results.value = articles.map((a) => ({
+				articleId: a.articleId,
+				title: a.title,
+				pages: a.pages.map((p) => ({ id: p.id, pageNo: p.pageNo, ocrStatus: 'pending' as OcrStatus })),
+			}));
 			for (const item of files.value) URL.revokeObjectURL(item.url);
 			files.value = [];
+			startPolling();
 		} else {
 			progress.value = '上传并开始识别…';
 			const { articleId } = await api<{ articleId: number }>('/api/admin/articles', { method: 'POST', body: form });
@@ -85,6 +111,72 @@ async function submit() {
 		progress.value = '';
 	}
 }
+
+// —— 进度轮询 + 卡住自愈 ——
+
+function startPolling() {
+	if (pollTimer) return;
+	void pollAll();
+	pollTimer = setInterval(() => void pollAll(), 2500);
+}
+
+function stopPolling() {
+	if (pollTimer) {
+		clearInterval(pollTimer);
+		pollTimer = null;
+	}
+	for (const k of Object.keys(pendingSince)) delete pendingSince[Number(k)];
+	retriggered.clear();
+}
+
+async function pollAll() {
+	for (const art of results.value) {
+		let detail: ArticleDetail;
+		try {
+			detail = await api<ArticleDetail>(`/api/articles/${art.articleId}`);
+		} catch {
+			continue;
+		}
+		for (const p of art.pages) {
+			const dp = detail.pages.find((x) => x.id === p.id);
+			if (!dp) continue;
+			p.ocrStatus = dp.ocrStatus;
+			if (dp.ocrStatus === 'pending') {
+				const since = pendingSince[p.id];
+				if (since === undefined) {
+					pendingSince[p.id] = Date.now();
+				} else if (Date.now() - since > STUCK_RETRIGGER_MS && !retriggered.has(p.id)) {
+					// 兜底：可能服务端 waitUntil 被回收，主动在新请求里重跑该页
+					retriggered.add(p.id);
+					pendingSince[p.id] = Date.now();
+					void api(`/api/admin/pages/${p.id}/ocr`, { method: 'POST' }).catch(() => {});
+				}
+			} else {
+				delete pendingSince[p.id];
+			}
+		}
+	}
+	if (allDone.value && pollTimer) {
+		clearInterval(pollTimer);
+		pollTimer = null;
+	}
+}
+
+async function retryPage(p: BatchPage) {
+	if (p.ocrStatus !== 'failed') return;
+	p.ocrStatus = 'pending';
+	pendingSince[p.id] = Date.now();
+	retriggered.delete(p.id);
+	await api(`/api/admin/pages/${p.id}/ocr`, { method: 'POST' }).catch(() => {});
+	startPolling();
+}
+
+function reset() {
+	stopPolling();
+	results.value = [];
+}
+
+onBeforeUnmount(stopPolling);
 </script>
 
 <template>
@@ -92,16 +184,39 @@ async function submit() {
 		<h1>上传绘本</h1>
 
 		<div v-if="results.length" class="results">
-			<p class="ok">✅ AI 识别为 {{ results.length }} 篇文章，已建为草稿，请逐篇校对后发布：</p>
+			<p v-if="allDone" class="banner ok">✅ 全部识别完成，共 {{ results.length }} 篇草稿，请逐篇校对后发布</p>
+			<p v-else class="banner run">🔍 已分为 {{ results.length }} 篇，正在逐篇识别正文…（可先离开，识别在后台继续，稍后回来校对）</p>
+
 			<ul>
-				<li v-for="r in results" :key="r.articleId">
-					<RouterLink class="btn ghost small" :to="`/admin/proofread/${r.articleId}`">
-						校对《{{ r.title || '未命名' }}》（{{ r.pageCount }} 页）
-					</RouterLink>
+				<li v-for="a in results" :key="a.articleId" class="artrow">
+					<div class="artmain">
+						<RouterLink class="tlink" :to="`/admin/proofread/${a.articleId}`">《{{ a.title || '未命名' }}》</RouterLink>
+						<span class="sub">
+							{{ doneCount(a) }}/{{ a.pages.length }} 页已识别<template v-if="failedCount(a)">
+								· {{ failedCount(a) }} 页失败（点红点重试）</template
+							>
+						</span>
+					</div>
+					<div class="pgdots">
+						<button
+							v-for="p in a.pages"
+							:key="p.id"
+							type="button"
+							class="dot"
+							:class="p.ocrStatus"
+							:disabled="p.ocrStatus !== 'failed'"
+							:title="`第 ${p.pageNo} 页：${p.ocrStatus === 'done' ? '已识别' : p.ocrStatus === 'failed' ? '失败，点击重识别' : '识别中…'}`"
+							@click="retryPage(p)"
+						>
+							{{ p.pageNo }}
+						</button>
+					</div>
+					<RouterLink class="btn ghost small" :to="`/admin/proofread/${a.articleId}`">校对</RouterLink>
 				</li>
 			</ul>
+
 			<div class="rowbtns">
-				<button type="button" class="btn ghost" @click="results = []">继续上传</button>
+				<button type="button" class="btn ghost" @click="reset">继续上传</button>
 				<RouterLink to="/admin" class="btn">返回家长区</RouterLink>
 			</div>
 		</div>
@@ -120,7 +235,7 @@ async function submit() {
 			<p class="hint">
 				{{
 					autoSplit
-						? '一次上传多篇文章的所有页面（顺序可乱），AI 会按页码、语义衔接、版式自动分组并排序，一次建成多篇草稿。'
+						? '一次上传多篇文章的所有页面（顺序可乱），AI 会按页码、语义衔接、版式自动分组并排序，随后自动逐篇识别正文，直到全部完成。'
 						: '按阅读顺序选择同一篇文章的页面照片（一张照片 = 一页），上传后自动识别文字与拼音。'
 				}}
 			</p>
@@ -259,10 +374,19 @@ h1 {
 	flex-direction: column;
 	gap: 14px;
 }
-.results .ok {
-	color: var(--accent);
-	font-weight: 600;
+.banner {
 	margin: 0;
+	font-weight: 600;
+	padding: 10px 12px;
+	border-radius: 10px;
+}
+.banner.ok {
+	color: #2e7d32;
+	background: #eaf6ea;
+}
+.banner.run {
+	color: var(--accent);
+	background: #fff8ec;
 }
 .results ul {
 	list-style: none;
@@ -271,6 +395,63 @@ h1 {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
+}
+.artrow {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+	padding: 10px 12px;
+	border: 1px solid #eadfca;
+	border-radius: 10px;
+	background: #fff;
+}
+.artmain {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+	flex: 1;
+}
+.tlink {
+	font-size: 16px;
+	font-weight: 600;
+}
+.sub {
+	color: #9a8a70;
+	font-size: 13px;
+}
+.pgdots {
+	display: flex;
+	gap: 5px;
+	flex-wrap: wrap;
+}
+.dot {
+	width: 26px;
+	height: 26px;
+	border-radius: 50%;
+	border: 0;
+	font-size: 12px;
+	color: #fff;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+.dot.done {
+	background: #4caf50;
+}
+.dot.pending {
+	background: #d9a441;
+	animation: pulse 1.1s ease-in-out infinite;
+}
+.dot.failed {
+	background: var(--danger);
+	cursor: pointer;
+}
+@keyframes pulse {
+	50% {
+		opacity: 0.45;
+	}
 }
 .rowbtns {
 	display: flex;

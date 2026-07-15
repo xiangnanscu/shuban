@@ -126,4 +126,11 @@ export interface AiSettings {
 	};
 }
 
+export interface RecordingSettings {
+	maxRecSec: number;
+	defaults: {
+		maxRecSec: number;
+	};
+}
+
 export const isHan = (s: string): boolean => /\p{Script=Han}/u.test(s);

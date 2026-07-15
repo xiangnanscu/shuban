@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { AppEnv } from '../env';
 import { err, ok } from '../env';
+import { getMaxRecSec } from '../lib/settings';
 
 const MAX_REC_BYTES = 20 * 1024 * 1024;
 const AUDIO_TYPES = new Set(['audio/mpeg', 'audio/mp3']);
@@ -28,6 +29,11 @@ export const recordingRoutes = new Hono<AppEnv>()
 		const articleId = Number.isInteger(articleIdRaw) && articleIdRaw > 0 ? articleIdRaw : null;
 		const durationRaw = Number(form.get('durationSec'));
 		const durationSec = Number.isFinite(durationRaw) && durationRaw > 0 ? Math.round(durationRaw * 10) / 10 : null;
+
+		const maxRecSec = await getMaxRecSec(c.env.DB);
+		if (durationSec != null && durationSec > maxRecSec) {
+			return c.json(err('too_long', `录音超过 ${maxRecSec} 秒，视为中途走开，已舍弃`), 400);
+		}
 
 		const key = `rec/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.mp3`;
 		await c.env.BUCKET.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: 'audio/mpeg' } });

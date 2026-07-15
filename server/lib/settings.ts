@@ -76,6 +76,21 @@ export async function setAiSettings(db: D1Database, patch: Partial<Record<keyof 
 	}
 }
 
+/** 录音时长超过此阈值（秒）视为孩子中途走开、朗读未完成，上传时直接舍弃 */
+export const DEFAULT_MAX_REC_SEC = 180;
+const MAX_REC_SEC_KEY = 'rec_max_sec';
+
+export async function getMaxRecSec(db: D1Database): Promise<number> {
+	const v = await getSetting(db, MAX_REC_SEC_KEY);
+	const n = v ? Number(v) : NaN;
+	return Number.isFinite(n) && n > 0 ? n : DEFAULT_MAX_REC_SEC;
+}
+
+export async function setMaxRecSec(db: D1Database, value: string | null): Promise<void> {
+	if (value == null || value === '') await deleteSetting(db, MAX_REC_SEC_KEY);
+	else await setSetting(db, MAX_REC_SEC_KEY, value);
+}
+
 /** 用 DB 里家长设置的覆盖值替换 env 对应字段；未设置的项沿用 wrangler vars 默认值 */
 export function applyAiSettings(env: Bindings, s: AiSettings): Bindings {
 	const defaultOrder = env.OCR_PROVIDER.split(',')

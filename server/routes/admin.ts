@@ -4,7 +4,17 @@ import type { AppEnv, OcrMessage } from '../env';
 import { err, ok } from '../env';
 import { adminAuth, createSessionToken, currentPinVersion, hashPin, randomSaltHex, SESSION_COOKIE } from '../lib/auth';
 import { segmentImages } from '../ocr/segment';
-import { AI_PROVIDERS, type AiProviderName, getAiSettings, getSetting, setAiSettings, setSetting } from '../lib/settings';
+import {
+	AI_PROVIDERS,
+	type AiProviderName,
+	DEFAULT_MAX_REC_SEC,
+	getAiSettings,
+	getMaxRecSec,
+	getSetting,
+	setAiSettings,
+	setMaxRecSec,
+	setSetting,
+} from '../lib/settings';
 import { getProviderTimeoutMs } from '../lib/ocr-run';
 import { timingSafeEqual } from '../lib/bytes';
 import type { PageLine } from '../ocr';
@@ -343,6 +353,25 @@ export const adminRoutes = new Hono<AppEnv>()
 			...(body.segCompress !== undefined && { segCompress: body.segCompress === false ? '0' : null }),
 		});
 		return c.json(ok(await aiSettingsPayload(c.env)));
+	})
+
+	// 录音设置：超过阈值秒数视为孩子走开、朗读未完成，上传时舍弃
+	.get('/settings/recording', async (c) =>
+		c.json(ok({ maxRecSec: await getMaxRecSec(c.env.DB), defaults: { maxRecSec: DEFAULT_MAX_REC_SEC } })),
+	)
+
+	.put('/settings/recording', async (c) => {
+		const body = await c.req.json<{ maxRecSec?: number | string | null }>().catch(() => null);
+		if (!body) return c.json(err('bad_body', '请求体不是 JSON'), 400);
+
+		let maxRecSecStr: string | null = null;
+		if (body.maxRecSec !== undefined && body.maxRecSec !== null && body.maxRecSec !== '') {
+			const n = Number(body.maxRecSec);
+			if (!Number.isFinite(n) || n <= 0) return c.json(err('bad_max_rec_sec', '阈值需为正数'), 400);
+			maxRecSecStr = String(Math.round(n));
+		}
+		await setMaxRecSec(c.env.DB, maxRecSecStr);
+		return c.json(ok({ maxRecSec: await getMaxRecSec(c.env.DB), defaults: { maxRecSec: DEFAULT_MAX_REC_SEC } }));
 	})
 
 	// 改 PIN（会话全部失效并重发本会话）

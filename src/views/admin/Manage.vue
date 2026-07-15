@@ -2,7 +2,7 @@
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api, ApiError } from '@/composables/useApi';
-import type { AiProviderName, AiSettings, ArticleSummary } from '@/types';
+import type { AiProviderName, AiSettings, ArticleSummary, RecordingSettings } from '@/types';
 
 const router = useRouter();
 const articles = ref<ArticleSummary[]>([]);
@@ -26,6 +26,10 @@ const aiClaudeModel = ref('');
 const aiMimoModel = ref('');
 const aiTimeoutMs = ref('');
 const aiSegCompress = ref(true);
+
+const showRecForm = ref(false);
+const rec = ref<RecordingSettings | null>(null);
+const recMaxRecSec = ref('');
 
 async function loadAiSettings() {
 	ai.value = await api<AiSettings>('/api/admin/settings/ai');
@@ -59,6 +63,30 @@ async function saveAiSettings() {
 			}),
 		});
 		msg.value = 'AI 设置已保存';
+	} catch (e) {
+		msg.value = e instanceof ApiError ? e.message : '保存失败';
+	}
+}
+
+async function loadRecSettings() {
+	rec.value = await api<RecordingSettings>('/api/admin/settings/recording');
+	recMaxRecSec.value = String(rec.value.maxRecSec);
+}
+
+async function toggleRecForm() {
+	showRecForm.value = !showRecForm.value;
+	if (showRecForm.value && !rec.value) await loadRecSettings();
+}
+
+async function saveRecSettings() {
+	msg.value = '';
+	try {
+		rec.value = await api<RecordingSettings>('/api/admin/settings/recording', {
+			method: 'PUT',
+			body: JSON.stringify({ maxRecSec: recMaxRecSec.value.trim() || null }),
+		});
+		recMaxRecSec.value = String(rec.value.maxRecSec);
+		msg.value = '录音设置已保存';
 	} catch (e) {
 		msg.value = e instanceof ApiError ? e.message : '保存失败';
 	}
@@ -127,6 +155,7 @@ async function logout() {
 				<button type="button" class="btn ghost small" @click="clearAllTaps">清除所有点击历史</button>
 				<button type="button" class="btn ghost small" @click="showPinForm = !showPinForm">修改 PIN</button>
 				<button type="button" class="btn ghost small" @click="toggleAiForm">AI 设置</button>
+				<button type="button" class="btn ghost small" @click="toggleRecForm">录音设置</button>
 				<button type="button" class="btn ghost small" @click="logout">退出</button>
 			</div>
 		</header>
@@ -173,6 +202,17 @@ async function logout() {
 			</label>
 			<p class="hint small">关闭后分篇用原图分组识别，成功率更高（避免被误判为一篇），但更耗 token、更慢。</p>
 			<button class="btn small" type="submit">保存 AI 设置</button>
+		</form>
+
+		<form v-if="showRecForm && rec" class="aiform" @submit.prevent="saveRecSettings">
+			<label>
+				录音最大时长阈值（秒）
+				<input v-model="recMaxRecSec" type="number" min="1" :placeholder="String(rec.defaults.maxRecSec)" />
+			</label>
+			<p class="hint small">
+				超过此时长的录音视为孩子中途走开、朗读未完成，上传时直接舍弃（不保存）。留空即用出厂默认值 {{ rec.defaults.maxRecSec }} 秒。
+			</p>
+			<button class="btn small" type="submit">保存录音设置</button>
 		</form>
 
 		<p v-if="msg" class="hint">{{ msg }}</p>

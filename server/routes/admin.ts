@@ -4,6 +4,7 @@ import type { AppEnv, OcrMessage } from '../env';
 import { err, ok } from '../env';
 import { adminAuth, createSessionToken, currentPinVersion, hashPin, randomSaltHex, SESSION_COOKIE } from '../lib/auth';
 import { segmentImages } from '../ocr/segment';
+import { segmentAndRecognizeImages } from '../ocr/combined';
 import {
 	AI_PROVIDERS,
 	type AiProviderName,
@@ -35,6 +36,7 @@ async function aiSettingsPayload(env: Bindings) {
 		mimoModel: s.mimoModel,
 		timeoutMs: s.timeoutMs,
 		segCompress: s.segCompress,
+		segCombined: s.segCombined,
 		defaults: {
 			providerOrder: env.OCR_PROVIDER.split(',')
 				.map((x) => x.trim())
@@ -97,20 +99,63 @@ export const adminRoutes = new Hono<AppEnv>()
 		}
 
 		const buffers = await Promise.all(files.map((f) => f.arrayBuffer()));
+
+		type PageMeta = { id: number; pageNo: number; ocrStatus: 'pending' | 'done' };
+		const created: { articleId: number; title: string; pages: PageMeta[] }[] = [];
+		const ocrMessages: { body: OcrMessage }[] = [];
+
+		// 组合模式：一次 prompt 同时完成分篇+逐页识别，直接落库为 done；
+		// 未启用 / 无可用引擎 / 调用失败时返回 null，退回下面的「分篇 + 队列逐页 OCR」两段式。
+		const { segCombined } = await getAiSettings(c.env.DB);
+		const combined = segCombined ? await segmentAndRecognizeImages(c.env, buffers) : null;
+		if (combined) {
+			for (const g of combined) {
+				const title = g.title ?? '';
+				const ins = await c.env.DB.prepare('INSERT INTO articles (title) VALUES (?1)').bind(title).run();
+				const articleId = ins.meta.last_row_id;
+
+				const pagesMeta: PageMeta[] = [];
+				for (let pn = 0; pn < g.pages.length; pn++) {
+					const { index, content } = g.pages[pn];
+					const key = `img/${articleId}/${pn + 1}.jpg`;
+					await c.env.BUCKET.put(key, buffers[index], { httpMetadata: { contentType: files[index].type } });
+					if (content) {
+						const p = await c.env.DB.prepare(
+							"INSERT INTO pages (article_id, page_no, image_key, content_json, ocr_status) VALUES (?1, ?2, ?3, ?4, 'done')",
+						)
+							.bind(articleId, pn + 1, key, JSON.stringify({ lines: content.lines }))
+							.run();
+						pagesMeta.push({ id: p.meta.last_row_id, pageNo: pn + 1, ocrStatus: 'done' });
+					} else {
+						// 组合结果里这一页缺识别（模型漏页/输出非法）→ 退回队列单页 OCR 兜底
+						const p = await c.env.DB.prepare('INSERT INTO pages (article_id, page_no, image_key) VALUES (?1, ?2, ?3)')
+							.bind(articleId, pn + 1, key)
+							.run();
+						ocrMessages.push({ body: { pageId: p.meta.last_row_id } });
+						pagesMeta.push({ id: p.meta.last_row_id, pageNo: pn + 1, ocrStatus: 'pending' });
+					}
+				}
+				await c.env.DB.prepare('UPDATE articles SET cover_key = ?1 WHERE id = ?2')
+					.bind(`img/${articleId}/1.jpg`, articleId)
+					.run();
+				created.push({ articleId, title, pages: pagesMeta });
+			}
+			if (ocrMessages.length) await c.env.OCR_QUEUE.sendBatch(ocrMessages);
+			return c.json(ok({ articles: created }));
+		}
+
 		// 分篇用小缩略图（前端另传，只做分组+排序，省 token）；缺失或数量不符则退回全分辨率图
 		const thumbFiles = form.getAll('segThumbs').filter((f): f is File => f instanceof File);
 		const segBuffers =
 			thumbFiles.length === files.length ? await Promise.all(thumbFiles.map((f) => f.arrayBuffer())) : buffers;
 		const groups = await segmentImages(c.env, segBuffers);
 
-		const created: { articleId: number; title: string; pages: { id: number; pageNo: number }[] }[] = [];
-		const ocrMessages: { body: OcrMessage }[] = [];
 		for (const g of groups) {
 			const title = g.title ?? '';
 			const ins = await c.env.DB.prepare('INSERT INTO articles (title) VALUES (?1)').bind(title).run();
 			const articleId = ins.meta.last_row_id;
 
-			const pagesMeta: { id: number; pageNo: number }[] = [];
+			const pagesMeta: PageMeta[] = [];
 			for (let pn = 0; pn < g.pages.length; pn++) {
 				const idx = g.pages[pn];
 				const key = `img/${articleId}/${pn + 1}.jpg`;
@@ -118,7 +163,7 @@ export const adminRoutes = new Hono<AppEnv>()
 				const p = await c.env.DB.prepare('INSERT INTO pages (article_id, page_no, image_key) VALUES (?1, ?2, ?3)')
 					.bind(articleId, pn + 1, key)
 					.run();
-				pagesMeta.push({ id: p.meta.last_row_id, pageNo: pn + 1 });
+				pagesMeta.push({ id: p.meta.last_row_id, pageNo: pn + 1, ocrStatus: 'pending' });
 			}
 			await c.env.DB.prepare('UPDATE articles SET cover_key = ?1 WHERE id = ?2')
 				.bind(`img/${articleId}/1.jpg`, articleId)
@@ -326,6 +371,7 @@ export const adminRoutes = new Hono<AppEnv>()
 				mimoModel?: string | null;
 				timeoutMs?: number | string | null;
 				segCompress?: boolean | null;
+				segCombined?: boolean | null;
 			}>()
 			.catch(() => null);
 		if (!body) return c.json(err('bad_body', '请求体不是 JSON'), 400);
@@ -351,6 +397,7 @@ export const adminRoutes = new Hono<AppEnv>()
 			...(body.mimoModel !== undefined && { mimoModel: body.mimoModel?.trim() || null }),
 			...(timeoutStr !== undefined && { timeoutMs: timeoutStr }),
 			...(body.segCompress !== undefined && { segCompress: body.segCompress === false ? '0' : null }),
+			...(body.segCombined !== undefined && { segCombined: body.segCombined === true ? '1' : null }),
 		});
 		return c.json(ok(await aiSettingsPayload(c.env)));
 	})

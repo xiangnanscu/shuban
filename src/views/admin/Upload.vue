@@ -100,12 +100,13 @@ async function submit() {
 		if (autoSplit.value) {
 			progress.value = 'AI 正在按页码与语义分篇…';
 			const { articles } = await api<{
-				articles: { articleId: number; title: string; pages: { id: number; pageNo: number }[] }[];
+				articles: { articleId: number; title: string; pages: { id: number; pageNo: number; ocrStatus?: OcrStatus }[] }[];
 			}>('/api/admin/articles/batch', { method: 'POST', body: form });
 			results.value = articles.map((a) => ({
 				articleId: a.articleId,
 				title: a.title,
-				pages: a.pages.map((p) => ({ id: p.id, pageNo: p.pageNo, ocrStatus: 'pending' as OcrStatus })),
+				// 组合模式可能已直接识别完（done）；两段式返回 pending，随后由轮询更新
+				pages: a.pages.map((p) => ({ id: p.id, pageNo: p.pageNo, ocrStatus: p.ocrStatus ?? ('pending' as OcrStatus) })),
 			}));
 			for (const item of files.value) URL.revokeObjectURL(item.url);
 			files.value = [];

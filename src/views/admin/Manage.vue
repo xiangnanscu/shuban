@@ -26,6 +26,7 @@ const aiClaudeModel = ref('');
 const aiMimoModel = ref('');
 const aiTimeoutMs = ref('');
 const aiSegCompress = ref(true);
+const aiSegCombined = ref(false);
 
 const showRecForm = ref(false);
 const rec = ref<RecordingSettings | null>(null);
@@ -40,6 +41,7 @@ async function loadAiSettings() {
 	aiMimoModel.value = ai.value.mimoModel ?? '';
 	aiTimeoutMs.value = ai.value.timeoutMs ? String(ai.value.timeoutMs) : '';
 	aiSegCompress.value = ai.value.segCompress;
+	aiSegCombined.value = ai.value.segCombined;
 }
 
 async function toggleAiForm() {
@@ -60,6 +62,7 @@ async function saveAiSettings() {
 				mimoModel: aiMimoModel.value.trim() || null,
 				timeoutMs: String(aiTimeoutMs.value ?? '').trim() || null,
 				segCompress: aiSegCompress.value,
+				segCombined: aiSegCombined.value,
 			}),
 		});
 		msg.value = 'AI 设置已保存';
@@ -201,6 +204,11 @@ async function logout() {
 				AI 自动分篇时压缩缩略图
 			</label>
 			<p class="hint small">关闭后分篇用原图分组识别，成功率更高（避免被误判为一篇），但更耗 token、更慢。</p>
+			<label class="checkline">
+				<input v-model="aiSegCombined" type="checkbox" />
+				分篇与识别合并为一次调用
+			</label>
+			<p class="hint small">开启后自动分篇时一次 prompt 同时完成分组与正文识别，简单页面更快、更省调用；页面复杂或漏识别的会自动退回逐页识别。仅 Gemini / Claude 支持。</p>
 			<button class="btn small" type="submit">保存 AI 设置</button>
 		</form>
 

@@ -116,6 +116,7 @@ export interface AiSettings {
 	mimoModel: string | null;
 	timeoutMs: number | null;
 	segCompress: boolean;
+	segCombined: boolean;
 	defaults: {
 		providerOrder: AiProviderName[];
 		geminiModel: string;

@@ -30,6 +30,8 @@ export interface AiSettings {
 	timeoutMs: number | null;
 	/** 自动分篇时是否压缩分组用缩略图；关闭则用原图分组，成功率更高但更耗 token/更慢 */
 	segCompress: boolean;
+	/** 组合模式：一次 prompt 同时完成分篇+逐页识别；简单页面更快、更省调用，默认关闭 */
+	segCombined: boolean;
 }
 
 const AI_KEY = {
@@ -40,10 +42,11 @@ const AI_KEY = {
 	mimoModel: 'ai_mimo_model',
 	timeoutMs: 'ai_timeout_ms',
 	segCompress: 'ai_seg_compress',
+	segCombined: 'ai_seg_combined',
 } as const satisfies Record<keyof AiSettings, string>;
 
 export async function getAiSettings(db: D1Database): Promise<AiSettings> {
-	const [primaryProvider, geminiModel, workersaiModel, claudeModel, mimoModel, timeoutMs, segCompress] =
+	const [primaryProvider, geminiModel, workersaiModel, claudeModel, mimoModel, timeoutMs, segCompress, segCombined] =
 		await Promise.all([
 			getSetting(db, AI_KEY.primaryProvider),
 			getSetting(db, AI_KEY.geminiModel),
@@ -52,6 +55,7 @@ export async function getAiSettings(db: D1Database): Promise<AiSettings> {
 			getSetting(db, AI_KEY.mimoModel),
 			getSetting(db, AI_KEY.timeoutMs),
 			getSetting(db, AI_KEY.segCompress),
+			getSetting(db, AI_KEY.segCombined),
 		]);
 	return {
 		primaryProvider: (AI_PROVIDERS as readonly string[]).includes(primaryProvider ?? '')
@@ -63,6 +67,7 @@ export async function getAiSettings(db: D1Database): Promise<AiSettings> {
 		mimoModel,
 		timeoutMs: timeoutMs && Number(timeoutMs) > 0 ? Number(timeoutMs) : null,
 		segCompress: segCompress !== '0',
+		segCombined: segCombined === '1',
 	};
 }
 

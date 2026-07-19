@@ -234,7 +234,7 @@ export const adminRoutes = new Hono<AppEnv>()
 		return c.json(ok({ ids }));
 	})
 
-	// 批量清除多篇文章的点击历史（tap_events），并重算受影响字的 total_taps
+	// 批量清除多篇文章的点击历史（tap_events），并重算受影响字的 total_taps，同时移出生字复习池（消除阅读页黄底）
 	.delete('/articles/batch/taps', async (c) => {
 		const body = await c.req.json<{ ids?: number[] }>().catch(() => null);
 		const ids = body?.ids;
@@ -257,6 +257,10 @@ export const adminRoutes = new Hono<AppEnv>()
 			await c.env.DB.prepare('UPDATE chars SET total_taps = (SELECT COUNT(*) FROM tap_events WHERE ch = ?1) WHERE ch = ?1')
 				.bind(ch)
 				.run();
+		}
+		for (const group of chunk([...chs], D1_MAX_PARAMS)) {
+			const placeholders = group.map((_, i) => `?${i + 1}`).join(',');
+			await c.env.DB.prepare(`DELETE FROM review_items WHERE ch IN (${placeholders})`).bind(...group).run();
 		}
 		return c.json(ok({ ids, cleared: chs.size }));
 	})
@@ -342,7 +346,7 @@ export const adminRoutes = new Hono<AppEnv>()
 		return c.json(ok({ id }));
 	})
 
-	// 清除单篇文章的点击历史（tap_events），并重算受影响字的 total_taps
+	// 清除单篇文章的点击历史（tap_events），并重算受影响字的 total_taps，同时移出生字复习池（消除阅读页黄底）
 	.delete('/articles/:id/taps', async (c) => {
 		const id = Number(c.req.param('id'));
 		if (!Number.isInteger(id)) return c.json(err('bad_id', '无效 id'), 400);
@@ -355,13 +359,18 @@ export const adminRoutes = new Hono<AppEnv>()
 				.bind(ch)
 				.run();
 		}
+		for (const group of chunk(results.map((r) => r.ch), D1_MAX_PARAMS)) {
+			const placeholders = group.map((_, i) => `?${i + 1}`).join(',');
+			await c.env.DB.prepare(`DELETE FROM review_items WHERE ch IN (${placeholders})`).bind(...group).run();
+		}
 		return c.json(ok({ id, cleared: results.length }));
 	})
 
-	// 清除全部点击历史（tap_events 清空，chars.total_taps 归零）
+	// 清除全部点击历史（tap_events 清空，chars.total_taps 归零，同时清空整个生字复习池，消除阅读页黄底）
 	.delete('/taps', async (c) => {
 		await c.env.DB.prepare('DELETE FROM tap_events').run();
 		await c.env.DB.prepare('UPDATE chars SET total_taps = 0').run();
+		await c.env.DB.prepare('DELETE FROM review_items').run();
 		return c.json(ok({ cleared: true }));
 	})
 

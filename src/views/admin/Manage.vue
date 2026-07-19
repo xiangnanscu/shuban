@@ -211,7 +211,10 @@ async function logout() {
 				<input v-model="aiSegCombined" type="checkbox" />
 				分篇与识别合并为一次调用
 			</label>
-			<p class="hint small">开启后自动分篇时一次 prompt 同时完成分组与正文识别，简单页面更快、更省调用；页面复杂或漏识别的会自动退回逐页识别。仅 Gemini / Claude 支持。</p>
+			<p class="hint small">
+				开启后自动分篇时一次 prompt 同时完成分组与正文识别，简单页面更快、更省调用；页面复杂或漏识别的会自动退回逐页识别。仅 Gemini /
+				Claude 支持。单组图片数 &gt; 4 张时会自动改用「先分篇、逐页排队识别」，避免大批量卡在一次不可拆分的调用里看不到进度。
+			</p>
 			<label>
 				批量上传每组最大张数
 				<input v-model="aiBatchGroupSize" type="number" min="1" :max="ai.defaults.maxBatchImages" :placeholder="String(ai.defaults.batchGroupSize)" />

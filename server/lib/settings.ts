@@ -40,6 +40,14 @@ export interface AiSettings {
 export const MAX_BATCH_IMAGES = 20;
 export const DEFAULT_BATCH_GROUP_SIZE = 10;
 
+/**
+ * 组合模式（一次 prompt 分篇+逐页识别）只在图片数不超过此值时才用；
+ * 超过则强制退回「先分篇、页面逐个走队列识别」两段式——
+ * 组合模式是单次不可拆分的大调用，页数一多既没有中途进度可看（一直卡在同一句话直到整批返回），
+ * 又更容易超时/漏页，跟批量上传要的"分组能看到逐页真实进度"的目标相悖。
+ */
+export const COMBINED_MAX_IMAGES = 4;
+
 const AI_KEY = {
 	primaryProvider: 'ai_primary_provider',
 	geminiModel: 'ai_gemini_model',

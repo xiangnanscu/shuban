@@ -8,6 +8,7 @@ import { segmentAndRecognizeImages } from '../ocr/combined';
 import {
 	AI_PROVIDERS,
 	type AiProviderName,
+	COMBINED_MAX_IMAGES,
 	DEFAULT_BATCH_GROUP_SIZE,
 	DEFAULT_MAX_REC_SEC,
 	MAX_BATCH_IMAGES,
@@ -110,9 +111,10 @@ export const adminRoutes = new Hono<AppEnv>()
 		const ocrMessages: { body: OcrMessage }[] = [];
 
 		// 组合模式：一次 prompt 同时完成分篇+逐页识别，直接落库为 done；
-		// 未启用 / 无可用引擎 / 调用失败时返回 null，退回下面的「分篇 + 队列逐页 OCR」两段式。
+		// 未启用 / 图片数超过 COMBINED_MAX_IMAGES（大批量没有中途进度、更易超时）/ 无可用引擎 / 调用失败
+		// 时返回 null，退回下面的「分篇 + 队列逐页 OCR」两段式，可看到逐页真实识别进度。
 		const { segCombined } = await getAiSettings(c.env.DB);
-		const combined = segCombined ? await segmentAndRecognizeImages(c.env, buffers) : null;
+		const combined = segCombined && files.length <= COMBINED_MAX_IMAGES ? await segmentAndRecognizeImages(c.env, buffers) : null;
 		if (combined) {
 			for (const g of combined) {
 				const title = g.title ?? '';

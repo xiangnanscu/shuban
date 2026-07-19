@@ -99,4 +99,14 @@ export const articleRoutes = new Hono<AppEnv>()
 				})),
 			}),
 		);
+	})
+
+	// 本篇文章点击过的字集（阅读页高亮用）：同一个字，别的文章点过、这篇没点过，不算
+	.get('/:id/taps', async (c) => {
+		const id = Number(c.req.param('id'));
+		if (!Number.isInteger(id)) return c.json(err('bad_id', '无效 id'), 400);
+		const { results } = await c.env.DB.prepare('SELECT DISTINCT ch FROM tap_events WHERE article_id = ?1')
+			.bind(id)
+			.all<{ ch: string }>();
+		return c.json(ok(results.map((r) => r.ch)));
 	});

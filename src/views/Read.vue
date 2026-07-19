@@ -13,7 +13,8 @@ const route = useRoute();
 const articleId = Number(route.params.id);
 
 const article = ref<ArticleDetail | null>(null);
-const pool = ref<Set<string>>(new Set());
+// 本篇文章点击过的字（不是全局生字池）：同一个字在别的文章点过、这篇没点过，不高亮
+const tappedChars = ref<Set<string>>(new Set());
 const isWideLandscape = () => window.matchMedia('(min-width: 900px) and (orientation: landscape)').matches;
 const showImage = ref(isWideLandscape());
 const error = ref('');
@@ -121,9 +122,12 @@ const onPageHide = () => endSession();
 onMounted(async () => {
 	window.addEventListener('pagehide', onPageHide);
 	try {
-		const [a, p] = await Promise.all([api<ArticleDetail>(`/api/articles/${articleId}`), api<string[]>('/api/pool')]);
+		const [a, t] = await Promise.all([
+			api<ArticleDetail>(`/api/articles/${articleId}`),
+			api<string[]>(`/api/articles/${articleId}/taps`),
+		]);
 		article.value = a;
-		pool.value = new Set(p);
+		tappedChars.value = new Set(t);
 		void scrollToFocus();
 		if (autoRecord.value && rec.supported) void startRecording();
 	} catch (e) {
@@ -153,9 +157,9 @@ function onTap(tok: PageToken) {
 	stopListen();
 	speak(tok.t, tok.p);
 	recordTap({ ch: tok.t, pinyin: tok.p, articleId });
-	const next = new Set(pool.value);
+	const next = new Set(tappedChars.value);
 	next.add(tok.t);
-	pool.value = next;
+	tappedChars.value = next;
 }
 
 function speakLine(line: PageLine) {
@@ -269,7 +273,7 @@ function stopListen() {
 						class="line-row"
 						:class="{ active: pi === currentPage && li === currentLine && listenState !== 'idle' }"
 					>
-						<RubyLine :line="line" :mode="mode" :known-set="pool" :focus-set="focusSet" @tap="onTap" />
+						<RubyLine :line="line" :mode="mode" :known-set="tappedChars" :focus-set="focusSet" @tap="onTap" />
 						<button
 							v-if="line.tokens.length > 0"
 							type="button"

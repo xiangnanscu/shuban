@@ -11,10 +11,13 @@ const items = ref<RecordingItem[]>([]);
 const loading = ref(true);
 const msg = ref('');
 const exporting = ref(false);
+const groupByArticle = ref(false);
+
+const sortedItems = computed(() => [...items.value].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
 
 const groups = computed(() => {
 	const map = new Map<string, RecordingItem[]>();
-	for (const r of items.value) {
+	for (const r of sortedItems.value) {
 		const key = r.articleTitle || '未命名';
 		if (!map.has(key)) map.set(key, []);
 		map.get(key)?.push(r);
@@ -128,23 +131,45 @@ async function remove(r: RecordingItem) {
 			</button>
 		</section>
 
+		<label class="group-toggle">
+			<input type="checkbox" v-model="groupByArticle" />
+			<span>按文章分组</span>
+		</label>
+
 		<p v-if="loading" class="hint">加载中…</p>
 		<p v-else-if="items.length === 0" class="hint">还没有录音。去阅读页点"🎙️ 朗读模式"录一段吧！</p>
 
-		<section v-for="[title, list] in groups" :key="title" class="group">
-			<h2>{{ title }}</h2>
-			<div v-for="r in list" :key="r.id" class="item">
+		<section v-else-if="!groupByArticle" class="group">
+			<div v-for="r in sortedItems" :key="r.id" class="item">
 				<div class="meta">
 					<span>{{ fmtTime(r.createdAt) }}</span>
+					<span class="title-tag">{{ r.articleTitle || '未命名' }}</span>
 					<span v-if="r.durationSec" class="dur">{{ fmtDur(r.durationSec) }}</span>
 				</div>
 				<audio :src="r.url" controls preload="none" class="player" />
 				<div class="ops">
-					<a class="btn ghost small" :href="r.url" :download="`${title}-${r.id}.mp3`">下载</a>
+					<a class="btn ghost small" :href="r.url" :download="`${r.articleTitle || '未命名'}-${r.id}.mp3`">下载</a>
 					<button type="button" class="btn danger small" @click="remove(r)">删除</button>
 				</div>
 			</div>
 		</section>
+
+		<template v-else>
+			<section v-for="[title, list] in groups" :key="title" class="group">
+				<h2>{{ title }}</h2>
+				<div v-for="r in list" :key="r.id" class="item">
+					<div class="meta">
+						<span>{{ fmtTime(r.createdAt) }}</span>
+						<span v-if="r.durationSec" class="dur">{{ fmtDur(r.durationSec) }}</span>
+					</div>
+					<audio :src="r.url" controls preload="none" class="player" />
+					<div class="ops">
+						<a class="btn ghost small" :href="r.url" :download="`${title}-${r.id}.mp3`">下载</a>
+						<button type="button" class="btn danger small" @click="remove(r)">删除</button>
+					</div>
+				</div>
+			</section>
+		</template>
 	</div>
 </template>
 
@@ -190,6 +215,24 @@ h1 {
 .group h2 {
 	font-size: 18px;
 	margin: 26px 0 8px;
+}
+.group-toggle {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 14px;
+	font-size: 14px;
+	color: var(--ink-soft);
+	cursor: pointer;
+	width: fit-content;
+}
+.title-tag {
+	flex: 1;
+	min-width: 0;
+	color: var(--accent);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 .item {
 	background: var(--card);

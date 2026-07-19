@@ -12,6 +12,7 @@ const articleId = Number(route.params.id);
 const title = ref('');
 const status = ref<'draft' | 'published'>('draft');
 const pages = reactive<ArticlePage[]>([]);
+const isWideLandscape = () => window.matchMedia('(min-width: 900px) and (orientation: landscape)').matches;
 const showImage = reactive<Record<number, boolean>>({});
 const msg = ref('');
 const busy = ref(false);
@@ -46,6 +47,7 @@ async function load(initial = false) {
 		const local = pages.find((x) => x.id === p.id);
 		if (!local) {
 			pages.push(p);
+			if (showImage[p.id] === undefined) showImage[p.id] = isWideLandscape();
 			if (p.ocrStatus === 'pending') pendingSince[p.id] = Date.now();
 		} else if (local.ocrStatus === 'pending') {
 			// 只覆盖仍在识别中的页，避免轮询冲掉本地已做的修改
@@ -229,7 +231,7 @@ async function applyRotation(page: ArticlePage) {
 
 		<input v-model="title" class="title-input" type="text" placeholder="文章标题" />
 
-		<section v-for="(page, pi) in pages" :key="page.id" class="pagecard">
+		<section v-for="(page, pi) in pages" :key="page.id" class="pagecard" :class="{ 'has-image': showImage[page.id] }">
 			<header class="pagehead">
 				<strong>第 {{ page.pageNo }} 页</strong>
 				<span
@@ -248,76 +250,80 @@ async function applyRotation(page: ArticlePage) {
 				</button>
 			</header>
 
-			<template v-if="showImage[page.id]">
-				<img
-					:src="page.imageUrl"
-					class="original"
-					:style="{ transform: `rotate(${rotatePreview[page.id] ?? 0}deg)` }"
-					alt="原书页面"
-				/>
-				<div class="rotate-bar">
-					<button type="button" class="btn ghost small" :disabled="rotating === page.id" @click="cycleRotatePreview(page.id)">
-						↻ 旋转预览
-					</button>
-					<button
-						v-if="rotatePreview[page.id]"
-						type="button"
-						class="btn small"
-						:disabled="rotating === page.id"
-						@click="applyRotation(page)"
-					>
-						{{ rotating === page.id ? '保存中…' : '保存旋转并重新识别' }}
-					</button>
-					<button
-						v-if="rotatePreview[page.id]"
-						type="button"
-						class="btn ghost small"
-						:disabled="rotating === page.id"
-						@click="rotatePreview[page.id] = 0"
-					>
-						撤销预览
-					</button>
-				</div>
-			</template>
-
-			<p v-if="page.ocrStatus === 'pending' && !isStuck(page)" class="hint">识别中，请稍候…（约 10~30 秒）</p>
-			<p v-else-if="page.ocrStatus === 'pending' && isStuck(page)" class="hint fail">
-				识别耗时较长，可能已卡住，可点"卡住了？重新识别"重试，或删除本篇重拍。
-			</p>
-			<p
-				v-else-if="page.ocrStatus === 'failed'"
-				class="hint fail clickable"
-				@click="showOcrError(page)"
-			>
-				识别失败（点此查看详情）：可点"重新识别"或删除本篇重拍。
-			</p>
-
-			<div v-for="(line, li) in page.content.lines" :key="li" class="linebox">
-				<div class="linetools">
-					<button type="button" class="tool" title="对齐" @click="cycleAlign(pi, li)">{{ ALIGN_LABEL[line.align] }}</button>
-					<button type="button" class="tool" title="加字" @click="addTokenToLine(pi, li)">＋字</button>
-					<button type="button" class="tool" title="下方插行" @click="insertLineAfter(pi, li)">＋行</button>
-					<button type="button" class="tool danger" title="删行" @click="deleteLine(pi, li)">✕</button>
-				</div>
-				<p class="linetext" :class="line.align">
-					<template v-for="(tok, ti) in line.tokens" :key="ti">
-						<ruby
-							v-if="tok.p !== undefined"
-							class="tok"
-							:class="{ sel: sel && sel.pi === pi && sel.li === li && sel.ti === ti, nopy: !tok.p }"
-							@click="selectToken(pi, li, ti)"
-							>{{ tok.t }}<rt>{{ tok.p || '？' }}</rt></ruby
+			<div class="pagebody">
+				<div v-if="showImage[page.id]" class="imgcol">
+					<img
+						:src="page.imageUrl"
+						class="original"
+						:style="{ transform: `rotate(${rotatePreview[page.id] ?? 0}deg)` }"
+						alt="原书页面"
+					/>
+					<div class="rotate-bar">
+						<button type="button" class="btn ghost small" :disabled="rotating === page.id" @click="cycleRotatePreview(page.id)">
+							↻ 旋转预览
+						</button>
+						<button
+							v-if="rotatePreview[page.id]"
+							type="button"
+							class="btn small"
+							:disabled="rotating === page.id"
+							@click="applyRotation(page)"
 						>
-						<span
-							v-else
-							class="tok punct"
-							:class="{ sel: sel && sel.pi === pi && sel.li === li && sel.ti === ti }"
-							@click="selectToken(pi, li, ti)"
-							>{{ tok.t }}</span
+							{{ rotating === page.id ? '保存中…' : '保存旋转并重新识别' }}
+						</button>
+						<button
+							v-if="rotatePreview[page.id]"
+							type="button"
+							class="btn ghost small"
+							:disabled="rotating === page.id"
+							@click="rotatePreview[page.id] = 0"
 						>
-					</template>
-					<span v-if="line.tokens.length === 0" class="hint">（空行）</span>
-				</p>
+							撤销预览
+						</button>
+					</div>
+				</div>
+
+				<div class="textcol">
+					<p v-if="page.ocrStatus === 'pending' && !isStuck(page)" class="hint">识别中，请稍候…（约 10~30 秒）</p>
+					<p v-else-if="page.ocrStatus === 'pending' && isStuck(page)" class="hint fail">
+						识别耗时较长，可能已卡住，可点"卡住了？重新识别"重试，或删除本篇重拍。
+					</p>
+					<p
+						v-else-if="page.ocrStatus === 'failed'"
+						class="hint fail clickable"
+						@click="showOcrError(page)"
+					>
+						识别失败（点此查看详情）：可点"重新识别"或删除本篇重拍。
+					</p>
+
+					<div v-for="(line, li) in page.content.lines" :key="li" class="linebox">
+						<div class="linetools">
+							<button type="button" class="tool" title="对齐" @click="cycleAlign(pi, li)">{{ ALIGN_LABEL[line.align] }}</button>
+							<button type="button" class="tool" title="加字" @click="addTokenToLine(pi, li)">＋字</button>
+							<button type="button" class="tool" title="下方插行" @click="insertLineAfter(pi, li)">＋行</button>
+							<button type="button" class="tool danger" title="删行" @click="deleteLine(pi, li)">✕</button>
+						</div>
+						<p class="linetext" :class="line.align">
+							<template v-for="(tok, ti) in line.tokens" :key="ti">
+								<ruby
+									v-if="tok.p !== undefined"
+									class="tok"
+									:class="{ sel: sel && sel.pi === pi && sel.li === li && sel.ti === ti, nopy: !tok.p }"
+									@click="selectToken(pi, li, ti)"
+									>{{ tok.t }}<rt>{{ tok.p || '？' }}</rt></ruby
+								>
+								<span
+									v-else
+									class="tok punct"
+									:class="{ sel: sel && sel.pi === pi && sel.li === li && sel.ti === ti }"
+									@click="selectToken(pi, li, ti)"
+									>{{ tok.t }}</span
+								>
+							</template>
+							<span v-if="line.tokens.length === 0" class="hint">（空行）</span>
+						</p>
+					</div>
+				</div>
 			</div>
 		</section>
 
@@ -469,5 +475,26 @@ async function applyRotation(page: ArticlePage) {
 .clickable {
 	cursor: pointer;
 	text-decoration: underline dotted;
+}
+
+@media (min-width: 900px) and (orientation: landscape) {
+	.wrap {
+		max-width: 1400px;
+	}
+	.pagecard.has-image .pagebody {
+		display: flex;
+		align-items: flex-start;
+		gap: 24px;
+	}
+	.pagecard.has-image .imgcol {
+		flex: 1 1 50%;
+		max-width: 50%;
+		position: sticky;
+		top: 64px;
+	}
+	.pagecard.has-image .textcol {
+		flex: 1 1 50%;
+		min-width: 0;
+	}
 }
 </style>

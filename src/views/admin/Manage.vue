@@ -117,34 +117,50 @@ function toggleSelectAll() {
 
 async function batchSetStatus(status: 'draft' | 'published') {
 	if (!selected.value.size) return;
-	await api('/api/admin/articles/batch', {
-		method: 'PUT',
-		body: JSON.stringify({ ids: [...selected.value], status }),
-	});
-	msg.value = status === 'published' ? '已发布选中文章' : '已下架选中文章';
-	await load();
+	try {
+		await api('/api/admin/articles/batch', {
+			method: 'PUT',
+			body: JSON.stringify({ ids: [...selected.value], status }),
+		});
+		msg.value = status === 'published' ? '已发布选中文章' : '已下架选中文章';
+		await load();
+	} catch (e) {
+		msg.value = e instanceof ApiError ? e.message : '操作失败';
+	}
 }
 
 async function batchRemove() {
 	if (!selected.value.size) return;
 	if (!confirm(`删除选中的 ${selected.value.size} 篇文章？图片与识别结果将一并删除，不可恢复。`)) return;
-	await api('/api/admin/articles/batch', { method: 'DELETE', body: JSON.stringify({ ids: [...selected.value] }) });
-	msg.value = '已删除选中文章';
-	await load();
+	try {
+		await api('/api/admin/articles/batch', { method: 'DELETE', body: JSON.stringify({ ids: [...selected.value] }) });
+		msg.value = '已删除选中文章';
+		await load();
+	} catch (e) {
+		msg.value = e instanceof ApiError ? e.message : '操作失败';
+	}
 }
 
 async function batchClearTaps() {
 	if (!selected.value.size) return;
 	if (!confirm(`清除选中 ${selected.value.size} 篇文章的点击历史？生字池与答题记录不受影响，不可恢复。`)) return;
-	await api('/api/admin/articles/batch/taps', { method: 'DELETE', body: JSON.stringify({ ids: [...selected.value] }) });
-	msg.value = '点击历史已清除';
-	selected.value.clear();
+	try {
+		await api('/api/admin/articles/batch/taps', { method: 'DELETE', body: JSON.stringify({ ids: [...selected.value] }) });
+		msg.value = '点击历史已清除';
+		selected.value.clear();
+	} catch (e) {
+		msg.value = e instanceof ApiError ? e.message : '操作失败';
+	}
 }
 
 async function clearAllTaps() {
 	if (!confirm('清除所有文章的点击历史？生字池与答题记录不受影响，不可恢复。')) return;
-	await api('/api/admin/taps', { method: 'DELETE' });
-	msg.value = '所有点击历史已清除';
+	try {
+		await api('/api/admin/taps', { method: 'DELETE' });
+		msg.value = '所有点击历史已清除';
+	} catch (e) {
+		msg.value = e instanceof ApiError ? e.message : '操作失败';
+	}
 }
 
 async function changePin() {

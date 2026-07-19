@@ -28,6 +28,14 @@ const MAX_IMAGES = MAX_BATCH_IMAGES;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
+// D1 单条 SQL 最多绑定 100 个参数，批量按 id 分组避免超限
+const D1_MAX_PARAMS = 100;
+function chunk<T>(arr: T[], size: number): T[][] {
+	const out: T[][] = [];
+	for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+	return out;
+}
+
 /** 当前生效的 AI 设置 + wrangler vars 里的出厂默认值；GET/PUT /settings/ai 共用，避免 PUT 响应漏字段 */
 async function aiSettingsPayload(env: Bindings) {
 	const s = await getAiSettings(env.DB);
@@ -190,12 +198,13 @@ export const adminRoutes = new Hono<AppEnv>()
 		const ids = body?.ids;
 		if (!Array.isArray(ids) || !ids.length || !ids.every((id) => Number.isInteger(id))) return c.json(err('bad_ids', 'ids 非法'), 400);
 		if (body?.status !== 'published' && body?.status !== 'draft') return c.json(err('bad_status', 'status 非法'), 400);
-		const placeholders = ids.map((_, i) => `?${i + 2}`).join(',');
-		await c.env.DB.prepare(
-			`UPDATE articles SET status = ?1, published_at = CASE WHEN ?1 = 'published' THEN datetime('now') ELSE published_at END WHERE id IN (${placeholders})`,
-		)
-			.bind(body!.status, ...ids)
-			.run();
+		const stmts = chunk(ids, D1_MAX_PARAMS - 1).map((group) => {
+			const placeholders = group.map((_, i) => `?${i + 2}`).join(',');
+			return c.env.DB.prepare(
+				`UPDATE articles SET status = ?1, published_at = CASE WHEN ?1 = 'published' THEN datetime('now') ELSE published_at END WHERE id IN (${placeholders})`,
+			).bind(body!.status, ...group);
+		});
+		await c.env.DB.batch(stmts);
 		return c.json(ok({ ids }));
 	})
 
@@ -204,17 +213,24 @@ export const adminRoutes = new Hono<AppEnv>()
 		const body = await c.req.json<{ ids?: number[] }>().catch(() => null);
 		const ids = body?.ids;
 		if (!Array.isArray(ids) || !ids.length || !ids.every((id) => Number.isInteger(id))) return c.json(err('bad_ids', 'ids 非法'), 400);
-		const placeholders = ids.map((_, i) => `?${i + 1}`).join(',');
-		const { results: pages } = await c.env.DB.prepare(`SELECT image_key FROM pages WHERE article_id IN (${placeholders})`)
-			.bind(...ids)
-			.all<{ image_key: string }>();
+		const groups = chunk(ids, D1_MAX_PARAMS);
+		const pages: { image_key: string }[] = [];
+		for (const group of groups) {
+			const placeholders = group.map((_, i) => `?${i + 1}`).join(',');
+			const { results } = await c.env.DB.prepare(`SELECT image_key FROM pages WHERE article_id IN (${placeholders})`)
+				.bind(...group)
+				.all<{ image_key: string }>();
+			pages.push(...results);
+		}
 		if (pages.length) await c.env.BUCKET.delete(pages.map((p) => p.image_key));
-		await c.env.DB.prepare(`DELETE FROM pages WHERE article_id IN (${placeholders})`)
-			.bind(...ids)
-			.run();
-		await c.env.DB.prepare(`DELETE FROM articles WHERE id IN (${placeholders})`)
-			.bind(...ids)
-			.run();
+		const stmts = groups.flatMap((group) => {
+			const placeholders = group.map((_, i) => `?${i + 1}`).join(',');
+			return [
+				c.env.DB.prepare(`DELETE FROM pages WHERE article_id IN (${placeholders})`).bind(...group),
+				c.env.DB.prepare(`DELETE FROM articles WHERE id IN (${placeholders})`).bind(...group),
+			];
+		});
+		await c.env.DB.batch(stmts);
 		return c.json(ok({ ids }));
 	})
 
@@ -223,19 +239,26 @@ export const adminRoutes = new Hono<AppEnv>()
 		const body = await c.req.json<{ ids?: number[] }>().catch(() => null);
 		const ids = body?.ids;
 		if (!Array.isArray(ids) || !ids.length || !ids.every((id) => Number.isInteger(id))) return c.json(err('bad_ids', 'ids 非法'), 400);
-		const placeholders = ids.map((_, i) => `?${i + 1}`).join(',');
-		const { results } = await c.env.DB.prepare(`SELECT DISTINCT ch FROM tap_events WHERE article_id IN (${placeholders})`)
-			.bind(...ids)
-			.all<{ ch: string }>();
-		await c.env.DB.prepare(`DELETE FROM tap_events WHERE article_id IN (${placeholders})`)
-			.bind(...ids)
-			.run();
-		for (const { ch } of results) {
+		const groups = chunk(ids, D1_MAX_PARAMS);
+		const chs = new Set<string>();
+		for (const group of groups) {
+			const placeholders = group.map((_, i) => `?${i + 1}`).join(',');
+			const { results } = await c.env.DB.prepare(`SELECT DISTINCT ch FROM tap_events WHERE article_id IN (${placeholders})`)
+				.bind(...group)
+				.all<{ ch: string }>();
+			for (const { ch } of results) chs.add(ch);
+		}
+		const delStmts = groups.map((group) => {
+			const placeholders = group.map((_, i) => `?${i + 1}`).join(',');
+			return c.env.DB.prepare(`DELETE FROM tap_events WHERE article_id IN (${placeholders})`).bind(...group);
+		});
+		await c.env.DB.batch(delStmts);
+		for (const ch of chs) {
 			await c.env.DB.prepare('UPDATE chars SET total_taps = (SELECT COUNT(*) FROM tap_events WHERE ch = ?1) WHERE ch = ?1')
 				.bind(ch)
 				.run();
 		}
-		return c.json(ok({ ids, cleared: results.length }));
+		return c.json(ok({ ids, cleared: chs.size }));
 	})
 
 	// 单页替换原图（校对时修正拍歪/拍倒），替换后自动重新识别

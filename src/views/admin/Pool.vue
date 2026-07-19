@@ -37,7 +37,7 @@ function fmtDue(iso: string): string {
 <template>
 	<div class="wrap">
 		<header class="bar">
-			<h1>生字池</h1>
+			<h1><span class="tzg-mark" aria-hidden="true"></span> 生字池</h1>
 			<RouterLink to="/admin" class="btn ghost small">‹ 返回家长区</RouterLink>
 		</header>
 
@@ -104,36 +104,52 @@ function fmtDue(iso: string): string {
 	align-items: center;
 	justify-content: space-between;
 	gap: 10px;
+	padding-bottom: 16px;
+	border-bottom: 2px dashed var(--paper-line);
 }
 h1 {
 	color: var(--accent);
 	margin: 0;
+	font-size: 26px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
 }
 h2 {
 	font-size: 16px;
-	color: #9a8a70;
-	margin: 26px 0 8px;
+	color: var(--ink-soft);
+	margin: 28px 0 8px;
+	font-weight: 600;
 }
 .list {
 	width: 100%;
 	border-collapse: collapse;
+	background: var(--card);
+	border-radius: var(--r-lg);
+	overflow: hidden;
+	box-shadow: var(--shadow-sm);
 }
 .list th {
 	text-align: left;
 	font-size: 12px;
-	color: #b0a186;
-	font-weight: 500;
-	padding: 6px 8px;
+	color: var(--ink-faint);
+	font-weight: 600;
+	padding: 10px 12px;
+	background: var(--paper-deep);
 }
 .list td {
-	padding: 10px 8px;
-	border-bottom: 1px solid #eadfca;
+	padding: 11px 12px;
+	border-bottom: 1px solid var(--paper-line);
 	vertical-align: middle;
 	font-size: 15px;
+}
+.list tr:last-child td {
+	border-bottom: 0;
 }
 .ch {
 	font-size: 24px;
 	font-weight: 600;
+	font-family: var(--font-display);
 }
 .py {
 	color: var(--pinyin);
@@ -142,7 +158,13 @@ h2 {
 	text-align: right;
 }
 .hint {
-	color: #9a8a70;
+	color: var(--ink-soft);
 	margin-top: 16px;
+}
+
+@media (min-width: 1100px) and (orientation: landscape) {
+	.wrap {
+		max-width: 960px;
+	}
 }
 </style>

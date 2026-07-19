@@ -1,12 +1,66 @@
-/* 书伴：暖纸色主题 + 儿童友好尺寸 */
+/*
+  书伴 · 设计令牌
+  意象：孩子摊开的纸书 + 家长手边的红笔。暖米纸色为底，朱红是批改/点字的强调色，
+  田字格是全站唯一的重复视觉签名（测验格子、页头小标、分割线）。
+
+  响应式约定（全站统一，勿在单页新造断点）：
+  - 默认：手机竖屏，单列，底部安全区留白
+  - (min-width: 720px)                              → 平板竖屏起点：双列网格、加大留白
+  - (min-width: 900px) and (orientation: landscape)  → 图文分栏（原图 vs 正文/校对）
+  - (min-width: 1100px) and (orientation: landscape) → 桌面横屏：多列网格、并排工具栏
+*/
+
 :root {
-	--paper: #faf6ee;
-	--ink: #2b2a28;
-	--accent: #d97736; /* 暖橙 */
-	--accent-dark: #b85c22;
-	--pinyin: #8a6d3b;
+	/* 色 */
+	--paper: #fbf3e3;
+	--paper-deep: #f1e4c8;
+	--paper-line: #e8d8b8;
+	--ink: #2b241c;
+	--ink-soft: #7a6c55;
+	--ink-faint: #b3a488;
 	--card: #ffffff;
+
+	--accent: #dd5a2c; /* 朱红：红笔 / 点字强调 */
+	--accent-dark: #a83e17;
+	--accent-soft: #fdead9;
+	--pinyin: #9c6b1f;
+
+	--bamboo: #4c7a52; /* 答对 / 已发布 */
+	--bamboo-soft: #e3eee0;
+	--bamboo-dark: #35682d;
+
 	--danger: #c0392b;
+	--danger-soft: #fbe4e0;
+
+	--gold-glow: rgba(247, 199, 90, 0.4);
+
+	/* 间距 */
+	--sp-1: 4px;
+	--sp-2: 8px;
+	--sp-3: 12px;
+	--sp-4: 16px;
+	--sp-5: 24px;
+	--sp-6: 32px;
+	--sp-7: 48px;
+	--sp-8: 64px;
+
+	/* 圆角 */
+	--r-sm: 8px;
+	--r-md: 12px;
+	--r-lg: 18px;
+	--r-xl: 24px;
+	--r-pill: 999px;
+
+	/* 阴影：暖棕色调，而非纯黑 */
+	--shadow-sm: 0 1px 3px rgba(74, 54, 24, 0.1);
+	--shadow-md: 0 4px 16px rgba(74, 54, 24, 0.12);
+	--shadow-lg: 0 10px 32px rgba(74, 54, 24, 0.16);
+
+	/* 字体 */
+	--font-body:
+		'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif;
+	--font-display: 'Kaiti SC', 'STKaiti', KaiTi, var(--font-body);
+	--font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
 
 *,
@@ -23,98 +77,207 @@ body {
 
 body {
 	background: var(--paper);
+	background-image: radial-gradient(circle at 1px 1px, rgba(74, 54, 24, 0.05) 1px, transparent 0);
+	background-size: 22px 22px;
 	color: var(--ink);
-	font-family:
-		'PingFang SC',
-		'Hiragino Sans GB',
-		'Noto Sans CJK SC',
-		'Microsoft YaHei',
-		system-ui,
-		sans-serif;
+	font-family: var(--font-body);
 	-webkit-font-smoothing: antialiased;
 	font-size: 16px;
+	line-height: 1.5;
 }
 
 a {
 	color: var(--accent);
 }
 
-/* 通用按钮：大热区（≥44px） */
+:focus-visible {
+	outline: 3px solid var(--accent);
+	outline-offset: 2px;
+	border-radius: var(--r-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.001ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.001ms !important;
+		scroll-behavior: auto !important;
+	}
+}
+
+h1,
+h2,
+h3 {
+	font-family: var(--font-display);
+	font-weight: 700;
+}
+
+/* ———— 按钮：大热区（≥44px），朱红主色 ———— */
 .btn {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+	gap: 6px;
 	min-height: 44px;
-	padding: 8px 18px;
+	padding: 9px 20px;
 	border: 0;
-	border-radius: 12px;
+	border-radius: var(--r-md);
 	background: var(--accent);
 	color: #fff;
+	font: inherit;
 	font-size: 16px;
+	font-weight: 600;
 	cursor: pointer;
 	text-decoration: none;
+	box-shadow: 0 2px 0 var(--accent-dark);
+	transition:
+		transform 0.12s ease,
+		box-shadow 0.12s ease,
+		background-color 0.15s ease;
+}
+.btn:not(:disabled):hover {
+	transform: translateY(-1px);
+	box-shadow: 0 3px 0 var(--accent-dark);
+}
+.btn:not(:disabled):active {
+	background: var(--accent-dark);
+	transform: translateY(1px);
+	box-shadow: 0 1px 0 var(--accent-dark);
 }
 .btn:disabled {
 	opacity: 0.4;
 	cursor: default;
-}
-.btn:not(:disabled):active {
-	background: var(--accent-dark);
+	box-shadow: none;
 }
 .btn.ghost {
 	background: transparent;
 	color: var(--accent);
 	border: 2px solid var(--accent);
+	box-shadow: none;
+	padding: 7px 18px;
+}
+.btn.ghost:not(:disabled):hover {
+	background: var(--accent-soft);
+	box-shadow: none;
+}
+.btn.ghost:not(:disabled):active {
+	background: var(--accent-soft);
+	transform: translateY(1px);
 }
 .btn.danger {
 	background: var(--danger);
+	box-shadow: 0 2px 0 #8a271c;
+}
+.btn.danger:not(:disabled):active {
+	background: #8a271c;
 }
 .btn.small {
 	min-height: 36px;
-	padding: 4px 12px;
+	padding: 5px 14px;
 	font-size: 14px;
-	border-radius: 10px;
+	border-radius: var(--r-sm);
+	box-shadow: none;
+}
+.btn.small.ghost {
+	padding: 4px 12px;
+}
+.btn.xl {
+	min-height: 64px;
+	padding: 14px 42px;
+	font-size: 22px;
+	border-radius: var(--r-lg);
 }
 
+/* ———— 表单 ———— */
 input,
 select,
 textarea {
 	font: inherit;
 	color: var(--ink);
 	background: #fff;
-	border: 1.5px solid #d9cbb2;
-	border-radius: 10px;
+	border: 1.5px solid var(--paper-line);
+	border-radius: var(--r-sm);
 	padding: 10px 12px;
 }
 input:focus,
+select:focus,
 textarea:focus {
 	outline: 2px solid var(--accent);
 	border-color: transparent;
 }
 
+/* ———— 卡片 ———— */
+.card {
+	background: var(--card);
+	border-radius: var(--r-lg);
+	box-shadow: var(--shadow-sm);
+}
+
+/* ———— 徽标 ———— */
 .chip {
-	display: inline-block;
-	border-radius: 999px;
-	padding: 2px 10px;
+	display: inline-flex;
+	align-items: center;
+	border-radius: var(--r-pill);
+	padding: 3px 11px;
 	font-size: 12px;
+	font-weight: 600;
 }
 .chip.draft {
-	background: #efe6d2;
-	color: #8a6d3b;
+	background: var(--paper-deep);
+	color: var(--pinyin);
 }
 .chip.published {
-	background: #dcedd5;
-	color: #35682d;
+	background: var(--bamboo-soft);
+	color: var(--bamboo-dark);
 }
 .chip.pending {
 	background: #fdf0cf;
 	color: #9a7b1a;
 }
 .chip.failed {
-	background: #f7d9d4;
+	background: var(--danger-soft);
 	color: var(--danger);
 }
 .chip.done {
-	background: #dcedd5;
-	color: #35682d;
+	background: var(--bamboo-soft);
+	color: var(--bamboo-dark);
+}
+
+/* ———— 田字格签名标记：全站唯一重复出现的装饰符 ———— */
+.tzg-mark {
+	position: relative;
+	display: inline-block;
+	width: 0.7em;
+	height: 0.7em;
+	border: 1.5px solid currentColor;
+	border-radius: 3px;
+	opacity: 0.55;
+	flex: none;
+}
+.tzg-mark::before,
+.tzg-mark::after {
+	content: '';
+	position: absolute;
+	background: currentColor;
+	opacity: 0.55;
+}
+.tzg-mark::before {
+	left: 0;
+	right: 0;
+	top: 50%;
+	height: 1px;
+	transform: translateY(-50%);
+}
+.tzg-mark::after {
+	top: 0;
+	bottom: 0;
+	left: 50%;
+	width: 1px;
+	transform: translateX(-50%);
+}
+
+.hint {
+	color: var(--ink-soft);
 }

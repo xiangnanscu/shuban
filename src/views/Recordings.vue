@@ -152,7 +152,7 @@ async function remove(r: RecordingItem) {
 .wrap {
 	max-width: 680px;
 	margin: 0 auto;
-	padding: 16px 16px 60px;
+	padding: 20px 16px 60px;
 }
 .bar {
 	display: flex;
@@ -162,21 +162,21 @@ async function remove(r: RecordingItem) {
 h1 {
 	color: var(--accent);
 	margin: 0;
-	font-size: 24px;
+	font-size: 26px;
 }
 .export-bar {
 	display: flex;
 	align-items: center;
 	gap: 10px;
-	margin-top: 14px;
-	padding: 10px 12px;
-	background: #fff;
-	border-radius: 12px;
-	box-shadow: 0 2px 6px rgba(90, 70, 40, 0.1);
+	margin-top: 18px;
+	padding: 12px 14px;
+	background: var(--card);
+	border-radius: var(--r-lg);
+	box-shadow: var(--shadow-sm);
 }
 .date-input {
-	border: 1px solid #e2d8c3;
-	border-radius: 8px;
+	border: 1.5px solid var(--paper-line);
+	border-radius: var(--r-sm);
 	padding: 6px 8px;
 	font-size: 14px;
 	color: inherit;
@@ -189,21 +189,22 @@ h1 {
 }
 .group h2 {
 	font-size: 18px;
-	margin: 22px 0 6px;
+	margin: 26px 0 8px;
 }
 .item {
-	background: #fff;
-	border-radius: 12px;
-	padding: 10px 12px;
+	background: var(--card);
+	border-radius: var(--r-md);
+	padding: 12px 14px;
 	margin-bottom: 10px;
-	box-shadow: 0 2px 6px rgba(90, 70, 40, 0.1);
+	box-shadow: var(--shadow-sm);
 }
 .meta {
 	display: flex;
 	gap: 12px;
 	font-size: 13px;
-	color: #9a8a70;
+	color: var(--ink-soft);
 	margin-bottom: 6px;
+	font-family: var(--font-mono);
 }
 .player {
 	width: 100%;
@@ -215,11 +216,26 @@ h1 {
 	justify-content: flex-end;
 }
 .hint {
-	color: #9a8a70;
+	color: var(--ink-soft);
 	text-align: center;
 	margin-top: 40px;
 }
 .err {
 	color: var(--danger);
+}
+
+@media (min-width: 1100px) and (orientation: landscape) {
+	.wrap {
+		max-width: 920px;
+	}
+	.group {
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+		gap: 0 16px;
+		align-content: start;
+	}
+	.group h2 {
+		grid-column: 1 / -1;
+	}
 }
 </style>

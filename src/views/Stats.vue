@@ -19,7 +19,7 @@ onMounted(async () => {
 	<div class="wrap">
 		<header class="bar">
 			<RouterLink to="/" class="btn ghost small">‹ 返回</RouterLink>
-			<h1>学习报告</h1>
+			<h1><span class="tzg-mark" aria-hidden="true"></span> 学习报告</h1>
 		</header>
 
 		<p v-if="loading" class="hint">加载中…</p>
@@ -27,19 +27,19 @@ onMounted(async () => {
 		<template v-else-if="stats">
 			<div class="cards">
 				<div class="card fire">
-					<div class="num">🔥 {{ stats.streak }}</div>
+					<div class="num mono">🔥 {{ stats.streak }}</div>
 					<div class="label">连续打卡（天）{{ stats.activeToday ? '' : '· 今天还没读哦' }}</div>
 				</div>
 				<div class="card">
-					<div class="num">{{ stats.articlesRead }}</div>
+					<div class="num mono">{{ stats.articlesRead }}</div>
 					<div class="label">读过的文章</div>
 				</div>
 				<div class="card">
-					<div class="num">{{ stats.poolActive }}</div>
+					<div class="num mono">{{ stats.poolActive }}</div>
 					<div class="label">生字池</div>
 				</div>
 				<div class="card">
-					<div class="num">{{ stats.graduated }}</div>
+					<div class="num mono">{{ stats.graduated }}</div>
 					<div class="label">已毕业 🎓</div>
 				</div>
 			</div>
@@ -68,18 +68,21 @@ onMounted(async () => {
 .wrap {
 	max-width: 680px;
 	margin: 0 auto;
-	padding: 16px 16px 60px;
+	padding: 20px 16px 60px;
 }
 .bar {
 	display: flex;
 	align-items: center;
 	gap: 12px;
-	margin-bottom: 16px;
+	margin-bottom: 20px;
 }
 h1 {
 	color: var(--accent);
 	margin: 0;
-	font-size: 24px;
+	font-size: 26px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
 }
 .cards {
 	display: grid;
@@ -87,34 +90,38 @@ h1 {
 	gap: 12px;
 }
 .card {
-	background: #fff;
-	border-radius: 14px;
-	padding: 16px;
+	background: var(--card);
+	border-radius: var(--r-lg);
+	padding: 18px;
 	text-align: center;
-	box-shadow: 0 2px 8px rgba(90, 70, 40, 0.1);
+	box-shadow: var(--shadow-sm);
 }
 .card.fire {
 	grid-column: 1 / -1;
-	background: linear-gradient(135deg, #fff4e3, #ffe9d2);
+	background: linear-gradient(135deg, var(--accent-soft), #ffe0c2);
 }
 .num {
-	font-size: 34px;
+	font-size: 36px;
 	font-weight: 700;
 	color: var(--accent-dark);
 }
+.num.mono {
+	font-family: var(--font-mono);
+	font-variant-numeric: tabular-nums;
+}
 .label {
-	color: #9a8a70;
+	color: var(--ink-soft);
 	font-size: 13px;
 	margin-top: 4px;
 }
 .duebtn {
 	display: block;
 	text-align: center;
-	margin: 16px 0;
+	margin: 18px 0;
 }
 .top h2 {
 	font-size: 18px;
-	margin: 22px 0 10px;
+	margin: 26px 0 12px;
 }
 .chips {
 	display: flex;
@@ -122,11 +129,11 @@ h1 {
 	gap: 10px;
 }
 .topchip {
-	background: #fff;
-	border-radius: 12px;
-	padding: 6px 12px;
+	background: var(--card);
+	border-radius: var(--r-md);
+	padding: 7px 14px;
 	font-size: 24px;
-	box-shadow: 0 1px 4px rgba(90, 70, 40, 0.12);
+	box-shadow: var(--shadow-sm);
 	display: inline-flex;
 	align-items: center;
 	gap: 8px;
@@ -138,17 +145,30 @@ h1 {
 .topchip em {
 	font-style: normal;
 	font-size: 12px;
-	color: #9a8a70;
+	color: var(--ink-faint);
+	font-family: var(--font-mono);
 }
 .links {
 	display: flex;
 	gap: 10px;
-	margin-top: 28px;
+	margin-top: 32px;
 	flex-wrap: wrap;
 }
 .hint {
-	color: #9a8a70;
+	color: var(--ink-soft);
 	text-align: center;
 	margin-top: 40px;
+}
+
+@media (min-width: 1100px) and (orientation: landscape) {
+	.wrap {
+		max-width: 920px;
+	}
+	.cards {
+		grid-template-columns: repeat(4, 1fr);
+	}
+	.card.fire {
+		grid-column: auto;
+	}
 }
 </style>

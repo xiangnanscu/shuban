@@ -187,7 +187,7 @@ async function logout() {
 <template>
 	<div class="wrap">
 		<header class="bar">
-			<h1>家长区</h1>
+			<h1><span class="tzg-mark" aria-hidden="true"></span> 家长区</h1>
 			<div class="actions">
 				<RouterLink to="/admin/upload" class="btn">＋ 上传新文章</RouterLink>
 				<RouterLink to="/admin/pool" class="btn ghost small">生字池</RouterLink>
@@ -318,32 +318,40 @@ async function logout() {
 	align-items: center;
 	justify-content: space-between;
 	flex-wrap: wrap;
-	gap: 10px;
+	gap: 12px;
+	padding-bottom: 16px;
+	border-bottom: 2px dashed var(--paper-line);
 }
 h1 {
 	color: var(--accent);
 	margin: 0;
+	font-size: 26px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
 }
 .actions {
 	display: flex;
 	gap: 8px;
 	align-items: center;
+	flex-wrap: wrap;
 }
 .pinform {
 	display: flex;
 	gap: 8px;
-	margin-top: 14px;
+	margin-top: 16px;
 	flex-wrap: wrap;
 }
 .aiform {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
-	margin-top: 14px;
-	padding: 14px;
-	border: 1px solid #eadfca;
-	border-radius: 8px;
-	max-width: 420px;
+	margin-top: 16px;
+	padding: 18px;
+	background: var(--card);
+	border-radius: var(--r-lg);
+	box-shadow: var(--shadow-sm);
+	max-width: 440px;
 }
 .aiform label {
 	display: flex;
@@ -355,9 +363,9 @@ h1 {
 .aiform input,
 .aiform select {
 	font-weight: normal;
-	padding: 6px 8px;
-	border: 1px solid #eadfca;
-	border-radius: 6px;
+	padding: 7px 10px;
+	border: 1.5px solid var(--paper-line);
+	border-radius: var(--r-sm);
 }
 .aiform .checkline {
 	flex-direction: row;
@@ -374,9 +382,12 @@ h1 {
 .batchbar {
 	display: flex;
 	align-items: center;
-	gap: 10px;
+	gap: 12px;
 	flex-wrap: wrap;
-	margin-top: 20px;
+	margin-top: 22px;
+	padding: 10px 14px;
+	background: var(--paper-deep);
+	border-radius: var(--r-md);
 }
 .batchbar .checkline {
 	display: flex;
@@ -387,13 +398,20 @@ h1 {
 }
 .list {
 	width: 100%;
-	margin-top: 10px;
+	margin-top: 14px;
 	border-collapse: collapse;
+	background: var(--card);
+	border-radius: var(--r-lg);
+	overflow: hidden;
+	box-shadow: var(--shadow-sm);
 }
 .list td {
-	padding: 12px 8px;
-	border-bottom: 1px solid #eadfca;
+	padding: 14px 10px;
+	border-bottom: 1px solid var(--paper-line);
 	vertical-align: middle;
+}
+.list tr:last-child td {
+	border-bottom: 0;
 }
 .list td.sel {
 	width: 32px;
@@ -406,8 +424,9 @@ h1 {
 	margin-left: 8px;
 }
 .meta {
-	color: #9a8a70;
+	color: var(--ink-soft);
 	white-space: nowrap;
+	font-family: var(--font-mono);
 }
 .ops {
 	display: flex;
@@ -416,12 +435,26 @@ h1 {
 	flex-wrap: wrap;
 }
 .hint {
-	color: #9a8a70;
+	color: var(--ink-soft);
 	margin-top: 16px;
 }
 .back {
 	display: inline-block;
 	margin-top: 30px;
 	font-size: 14px;
+	color: var(--ink-faint);
+	text-decoration: none;
+}
+.back:hover {
+	color: var(--accent);
+}
+
+@media (min-width: 1100px) and (orientation: landscape) {
+	.wrap {
+		max-width: 1080px;
+	}
+	.bar {
+		flex-wrap: nowrap;
+	}
 }
 </style>

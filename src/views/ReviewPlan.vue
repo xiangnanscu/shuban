@@ -86,11 +86,12 @@ onMounted(load);
 	display: flex;
 	align-items: center;
 	gap: 12px;
-	margin-bottom: 12px;
+	margin-bottom: 16px;
 }
 .back {
 	font-size: 15px;
 	text-decoration: none;
+	color: var(--ink-soft);
 }
 h1 {
 	font-size: 24px;
@@ -100,27 +101,29 @@ h1 {
 .tabs {
 	display: flex;
 	gap: 8px;
-	margin-bottom: 16px;
+	margin-bottom: 18px;
 }
 .tab {
 	flex: 1;
 	min-height: 44px;
-	border: 2px solid #e0b98c;
-	background: #fff;
-	border-radius: 12px;
+	border: 2px solid var(--paper-line);
+	background: var(--card);
+	border-radius: var(--r-md);
 	font-size: 16px;
-	color: var(--ink);
+	font-weight: 600;
+	color: var(--ink-soft);
 	cursor: pointer;
+	transition: all 0.15s ease;
 }
 .tab.on {
 	background: var(--accent);
 	border-color: var(--accent);
 	color: #fff;
-	font-weight: 600;
 }
 .summary {
 	font-size: 16px;
-	margin: 4px 0 14px;
+	margin: 4px 0 16px;
+	color: var(--ink-soft);
 }
 .plan {
 	list-style: none;
@@ -135,12 +138,19 @@ h1 {
 	grid-template-columns: auto 1fr auto;
 	align-items: center;
 	gap: 8px 10px;
-	background: #fff;
-	border-radius: 14px;
-	padding: 12px 14px;
+	background: var(--card);
+	border-radius: var(--r-lg);
+	padding: 14px 16px;
 	text-decoration: none;
 	color: var(--ink);
-	box-shadow: 0 2px 8px rgba(90, 70, 40, 0.12);
+	box-shadow: var(--shadow-sm);
+	transition:
+		transform 0.12s ease,
+		box-shadow 0.12s ease;
+}
+.link:hover {
+	transform: translateY(-1px);
+	box-shadow: var(--shadow-md);
 }
 .idx {
 	grid-row: span 2;
@@ -160,26 +170,40 @@ h1 {
 }
 .count {
 	font-size: 13px;
-	color: #9a8a70;
+	color: var(--ink-faint);
 	white-space: nowrap;
+	font-family: var(--font-mono);
 }
 .covers {
 	grid-column: 2 / 4;
 	font-size: 24px;
-	font-family: 'Kaiti SC', 'STKaiti', KaiTi, serif;
+	font-family: var(--font-display);
 	letter-spacing: 4px;
 	color: var(--accent);
 }
 .uncovered {
-	margin-top: 20px;
+	margin-top: 22px;
 	font-size: 14px;
-	color: #9a8a70;
+	color: var(--ink-soft);
 }
 .hint {
-	color: #9a8a70;
+	color: var(--ink-soft);
 }
 .center {
 	text-align: center;
 	padding-top: 6vh;
+}
+
+@media (min-width: 720px) {
+	.plan {
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+	}
+}
+
+@media (min-width: 1100px) and (orientation: landscape) {
+	.page {
+		max-width: 900px;
+	}
 }
 </style>

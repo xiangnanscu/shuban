@@ -343,7 +343,7 @@ async function applyRotation(page: ArticlePage) {
 .wrap {
 	max-width: 860px;
 	margin: 0 auto;
-	padding: 14px 16px 120px;
+	padding: 14px 16px 130px;
 }
 .bar {
 	display: flex;
@@ -352,38 +352,45 @@ async function applyRotation(page: ArticlePage) {
 	position: sticky;
 	top: 0;
 	background: var(--paper);
-	padding: 8px 0;
+	padding: 10px 0;
 	z-index: 5;
+	border-bottom: 1px solid var(--paper-line);
 }
 .grow {
 	flex: 1;
 }
 .msg {
 	color: var(--accent-dark);
+	font-weight: 600;
 }
 .title-input {
 	width: 100%;
 	font-size: 20px;
-	margin: 10px 0 18px;
+	font-weight: 600;
+	margin: 14px 0 20px;
 }
 .pagecard {
-	background: #fff;
-	border-radius: 14px;
-	padding: 14px;
-	margin-bottom: 18px;
-	box-shadow: 0 2px 8px rgba(90, 70, 40, 0.1);
+	background: var(--card);
+	border-radius: var(--r-lg);
+	padding: 16px;
+	margin-bottom: 20px;
+	box-shadow: var(--shadow-sm);
 }
 .pagehead {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	margin-bottom: 8px;
+	margin-bottom: 10px;
+}
+.pagehead strong {
+	font-family: var(--font-display);
 }
 .original {
 	width: 100%;
-	border-radius: 10px;
+	border-radius: var(--r-md);
 	margin: 8px 0;
 	transition: transform 0.15s ease;
+	box-shadow: var(--shadow-sm);
 }
 .rotate-bar {
 	display: flex;
@@ -392,22 +399,26 @@ async function applyRotation(page: ArticlePage) {
 	margin-bottom: 8px;
 }
 .linebox {
-	border-top: 1px dashed #eadfca;
-	padding: 6px 0;
+	border-top: 1px dashed var(--paper-line);
+	padding: 8px 0;
 }
 .linetools {
 	display: flex;
 	gap: 4px;
-	margin-bottom: 2px;
+	margin-bottom: 3px;
 }
 .tool {
-	border: 1px solid #d9cbb2;
-	background: #faf6ee;
-	border-radius: 8px;
+	border: 1px solid var(--paper-line);
+	background: var(--paper);
+	border-radius: var(--r-sm);
 	font-size: 12px;
-	padding: 2px 8px;
+	padding: 3px 9px;
 	cursor: pointer;
-	color: #8a6d3b;
+	color: var(--pinyin);
+}
+.tool:hover {
+	border-color: var(--accent);
+	color: var(--accent);
 }
 .tool.danger {
 	color: var(--danger);
@@ -426,17 +437,22 @@ async function applyRotation(page: ArticlePage) {
 .linetext.right {
 	text-align: right;
 }
+/* 红笔批改感：token 悬浮态用朱红虚线下划线提示"可点击修正" */
 .tok {
 	cursor: pointer;
 	border-radius: 6px;
 	padding: 0 1px;
+	transition: background-color 0.15s ease;
+}
+.tok:hover {
+	background: var(--accent-soft);
 }
 .tok rt {
 	font-size: 0.42em;
 	color: var(--pinyin);
 }
 .tok.sel {
-	background: rgba(217, 119, 54, 0.25);
+	background: var(--accent-soft);
 	outline: 2px solid var(--accent);
 }
 .tok.nopy rt {
@@ -447,11 +463,12 @@ async function applyRotation(page: ArticlePage) {
 	left: 0;
 	right: 0;
 	bottom: 0;
-	background: #fff;
-	border-top: 2px solid var(--accent);
+	background: var(--card);
+	border-top: 3px solid var(--accent);
+	box-shadow: 0 -6px 20px rgba(74, 54, 24, 0.14);
 	display: flex;
 	gap: 8px;
-	padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+	padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
 	align-items: center;
 	flex-wrap: wrap;
 	z-index: 20;
@@ -460,13 +477,14 @@ async function applyRotation(page: ArticlePage) {
 	width: 72px;
 	font-size: 24px;
 	text-align: center;
+	font-family: var(--font-display);
 }
 .editor .py {
 	width: 150px;
 	font-size: 18px;
 }
 .hint {
-	color: #9a8a70;
+	color: var(--ink-soft);
 	font-size: 14px;
 }
 .hint.fail {
@@ -484,17 +502,27 @@ async function applyRotation(page: ArticlePage) {
 	.pagecard.has-image .pagebody {
 		display: flex;
 		align-items: flex-start;
-		gap: 24px;
+		gap: 28px;
 	}
 	.pagecard.has-image .imgcol {
 		flex: 1 1 50%;
 		max-width: 50%;
 		position: sticky;
-		top: 64px;
+		top: 76px;
 	}
 	.pagecard.has-image .textcol {
 		flex: 1 1 50%;
 		min-width: 0;
+	}
+	.editor {
+		left: 50%;
+		right: auto;
+		bottom: 24px;
+		transform: translateX(-50%);
+		border-radius: var(--r-lg);
+		border: 1px solid var(--paper-line);
+		border-top: 3px solid var(--accent);
+		padding: 14px 20px;
 	}
 }
 </style>

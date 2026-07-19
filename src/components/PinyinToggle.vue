@@ -30,16 +30,22 @@ const options: { value: PinyinMode; label: string }[] = [
 .toggle {
 	display: inline-flex;
 	border: 2px solid var(--accent);
-	border-radius: 12px;
+	border-radius: var(--r-md);
 	overflow: hidden;
+	background: #fff;
 }
 .seg {
 	border: 0;
 	background: transparent;
-	padding: 8px 14px;
+	padding: 8px 16px;
 	font-size: 15px;
+	font-weight: 600;
 	color: var(--accent);
 	cursor: pointer;
+	transition: background-color 0.15s ease;
+}
+.seg + .seg {
+	border-left: 1px solid var(--accent-soft);
 }
 .seg.active {
 	background: var(--accent);

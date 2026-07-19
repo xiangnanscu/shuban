@@ -278,10 +278,12 @@ function playDing() {
 .back {
 	font-size: 15px;
 	text-decoration: none;
+	color: var(--ink-soft);
 }
 .progress {
 	font-size: 14px;
-	color: #9a8a70;
+	font-weight: 600;
+	color: var(--ink-soft);
 }
 .center {
 	text-align: center;
@@ -292,15 +294,9 @@ function playDing() {
 	margin-bottom: 8px;
 }
 h1 {
-	font-size: 26px;
+	font-size: 28px;
 	color: var(--accent);
-	margin: 8px 0 24px;
-}
-.btn.xl {
-	min-height: 64px;
-	padding: 12px 40px;
-	font-size: 22px;
-	border-radius: 18px;
+	margin: 8px 0 26px;
 }
 .quiz {
 	text-align: center;
@@ -314,34 +310,49 @@ h1 {
 	width: 120px;
 	height: 120px;
 	cursor: pointer;
+	box-shadow: var(--shadow-md);
+	transition: transform 0.12s ease;
+}
+.speaker:hover {
+	transform: scale(1.04);
 }
 .speaker:active {
-	background: #ffe9d6;
+	background: var(--accent-soft);
+	transform: scale(0.98);
 }
 .ask {
-	color: #9a8a70;
+	color: var(--ink-soft);
 	font-size: 16px;
-	margin: 16px 0 20px;
+	margin: 18px 0 22px;
 }
 .options {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 14px;
+	gap: 16px;
 	max-width: 380px;
 	margin: 0 auto;
 }
-/* 田字格：正方形格子 + 虚线十字辅助线 */
+/* 田字格：正方形格子 + 虚线十字辅助线——全站唯一的测验签名 */
 .opt.char {
 	position: relative;
 	aspect-ratio: 1;
-	border: 3px solid #e0b98c;
-	border-radius: 12px;
+	border: 3px solid var(--paper-line);
+	border-radius: var(--r-md);
 	background: #fff;
 	cursor: pointer;
 	color: var(--ink);
 	font-size: clamp(56px, 18vw, 96px);
 	line-height: 1;
-	font-family: 'Kaiti SC', 'STKaiti', KaiTi, serif;
+	font-family: var(--font-display);
+	box-shadow: var(--shadow-sm);
+	transition:
+		transform 0.1s ease,
+		box-shadow 0.15s ease;
+}
+.opt.char:not(:disabled):hover {
+	transform: translateY(-2px);
+	box-shadow: var(--shadow-md);
+	border-color: var(--accent);
 }
 .opt.char::before,
 .opt.char::after {
@@ -353,13 +364,13 @@ h1 {
 	left: 5%;
 	right: 5%;
 	top: 50%;
-	border-top: 2px dashed #f0d9bd;
+	border-top: 2px dashed var(--paper-line);
 }
 .opt.char::after {
 	top: 5%;
 	bottom: 5%;
 	left: 50%;
-	border-left: 2px dashed #f0d9bd;
+	border-left: 2px dashed var(--paper-line);
 }
 .opt.char .glyph {
 	position: relative;
@@ -369,23 +380,23 @@ h1 {
 	cursor: default;
 }
 .opt.right {
-	background: #dcedd5;
-	border-color: #5c9e4c;
+	background: var(--bamboo-soft);
+	border-color: var(--bamboo);
 }
 .opt.wrong {
-	background: #f7d9d4;
+	background: var(--danger-soft);
 	border-color: var(--danger);
 }
 .opt.dim {
-	opacity: 0.45;
+	opacity: 0.4;
 }
 .feedback {
-	margin-top: 22px;
+	margin-top: 24px;
 	font-size: 20px;
-	font-weight: 600;
+	font-weight: 700;
 }
 .feedback.good {
-	color: #35682d;
+	color: var(--bamboo-dark);
 }
 .feedback.bad {
 	color: var(--danger);
@@ -393,6 +404,8 @@ h1 {
 .score {
 	font-size: 22px;
 	margin-bottom: 24px;
+	font-family: var(--font-mono);
+	font-weight: 600;
 }
 .done-actions {
 	display: flex;
@@ -401,14 +414,14 @@ h1 {
 	margin-top: 20px;
 }
 .hint {
-	color: #9a8a70;
+	color: var(--ink-soft);
 }
 .reread {
 	max-width: 420px;
 	margin: 36px auto 0;
 	text-align: left;
-	border-top: 1px dashed rgba(154, 138, 112, 0.4);
-	padding-top: 20px;
+	border-top: 2px dashed var(--paper-line);
+	padding-top: 22px;
 }
 .reread h2 {
 	font-size: 19px;
@@ -421,19 +434,26 @@ h1 {
 	align-items: baseline;
 	gap: 12px;
 	background: #fff;
-	border-radius: 12px;
-	padding: 10px 14px;
+	border-radius: var(--r-md);
+	padding: 12px 16px;
 	margin-top: 10px;
 	text-decoration: none;
 	color: var(--ink);
-	box-shadow: 0 2px 8px rgba(90, 70, 40, 0.12);
+	box-shadow: var(--shadow-sm);
+	transition:
+		transform 0.12s ease,
+		box-shadow 0.12s ease;
+}
+.reread-item:hover {
+	transform: translateY(-1px);
+	box-shadow: var(--shadow-md);
 }
 .reread-item .rt {
 	font-size: 17px;
 	font-weight: 600;
 }
 .reread-item .rc {
-	font-family: 'Kaiti SC', 'STKaiti', KaiTi, serif;
+	font-family: var(--font-display);
 	font-size: 22px;
 	letter-spacing: 3px;
 	color: var(--accent);
@@ -443,6 +463,16 @@ h1 {
 	display: inline-block;
 	margin-top: 14px;
 	font-size: 14px;
-	color: #b0a186;
+	color: var(--ink-faint);
+}
+
+@media (min-width: 720px) {
+	.page {
+		max-width: 680px;
+	}
+	.options {
+		max-width: 440px;
+		gap: 20px;
+	}
 }
 </style>

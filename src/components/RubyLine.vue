@@ -84,7 +84,7 @@ function onTap(tok: PageToken, i: number) {
 
 <style scoped>
 .line {
-	font-size: clamp(28px, 6vw, 44px);
+	font-size: clamp(28px, 6vw, 46px);
 	line-height: 2.3;
 	margin: 0;
 	color: var(--ink);
@@ -109,19 +109,20 @@ ruby.han {
 	ruby-align: center;
 	cursor: pointer;
 	border-radius: 8px;
-	padding: 0 1px;
-	transition: background-color 0.2s;
+	padding: 0 2px;
+	transition: background-color 0.2s ease;
 }
 ruby.han.known {
-	background: rgba(255, 214, 90, 0.35);
+	background: var(--gold-glow);
+	box-shadow: 0 0 0 1px rgba(247, 199, 90, 0.55);
 }
 /* 重读计划的目标字：更醒目（在 known 之后，覆盖淡黄底纹） */
 ruby.han.focus {
-	background: rgba(255, 140, 40, 0.45);
+	background: var(--accent-soft);
 	outline: 2px solid var(--accent);
 }
 ruby.han.pop {
-	background: rgba(255, 160, 60, 0.55);
+	background: rgba(221, 90, 44, 0.28);
 	animation: pop 0.4s ease-out;
 }
 @keyframes pop {
@@ -136,9 +137,10 @@ ruby.han.pop {
 	}
 }
 rt {
-	font-size: 0.55em;
-	color: var(--pinyin, #8a6d3b);
+	font-size: 0.52em;
+	color: var(--pinyin);
 	letter-spacing: 0.02em;
+	font-weight: 600;
 }
 rt.ghost {
 	visibility: hidden; /* 占位不塌陷，切换档位不跳版 */

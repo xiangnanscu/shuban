@@ -268,7 +268,7 @@ onBeforeUnmount(stopPolling);
 
 <template>
 	<div class="wrap">
-		<h1>上传绘本</h1>
+		<h1><span class="tzg-mark" aria-hidden="true"></span> 上传绘本</h1>
 
 		<div v-if="results.length || groups.length" class="results">
 			<div v-if="groups.length" class="grouppanel">
@@ -392,11 +392,15 @@ onBeforeUnmount(stopPolling);
 	padding: 20px 16px 60px;
 	display: flex;
 	flex-direction: column;
-	gap: 14px;
+	gap: 16px;
 }
 h1 {
 	color: var(--accent);
 	margin: 0;
+	font-size: 26px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
 }
 .picker {
 	cursor: pointer;
@@ -409,15 +413,16 @@ h1 {
 .thumb {
 	position: relative;
 	aspect-ratio: 3 / 4;
-	border-radius: 10px;
+	border-radius: var(--r-md);
 	overflow: hidden;
-	background: #f3ead9;
+	background: var(--paper-deep);
+	box-shadow: var(--shadow-sm);
 }
 .thumb img {
 	width: 100%;
 	height: 100%;
 	object-fit: contain;
-	background: #f3ead9;
+	background: var(--paper-deep);
 	transition: transform 0.15s ease;
 }
 .no {
@@ -461,7 +466,7 @@ h1 {
 	color: var(--danger);
 }
 .hint {
-	color: #9a8a70;
+	color: var(--ink-soft);
 	font-size: 14px;
 	margin: 0;
 }
@@ -472,18 +477,19 @@ h1 {
 .mode {
 	flex: 1;
 	text-align: center;
-	padding: 10px;
-	border: 2px solid #eadfca;
-	border-radius: 10px;
+	padding: 12px;
+	border: 2px solid var(--paper-line);
+	border-radius: var(--r-md);
 	cursor: pointer;
 	font-size: 15px;
-	color: #9a8a70;
+	font-weight: 600;
+	color: var(--ink-soft);
+	transition: all 0.15s ease;
 }
 .mode.on {
 	border-color: var(--accent);
 	color: var(--accent);
-	font-weight: 600;
-	background: #fff8ec;
+	background: var(--accent-soft);
 }
 .mode input {
 	display: none;
@@ -496,16 +502,16 @@ h1 {
 .banner {
 	margin: 0;
 	font-weight: 600;
-	padding: 10px 12px;
-	border-radius: 10px;
+	padding: 12px 14px;
+	border-radius: var(--r-md);
 }
 .banner.ok {
-	color: #2e7d32;
-	background: #eaf6ea;
+	color: var(--bamboo-dark);
+	background: var(--bamboo-soft);
 }
 .banner.run {
 	color: var(--accent);
-	background: #fff8ec;
+	background: var(--accent-soft);
 }
 .results ul {
 	list-style: none;
@@ -533,10 +539,10 @@ h1 {
 	align-items: center;
 	gap: 10px;
 	flex-wrap: wrap;
-	padding: 8px 12px;
-	border: 1px solid #eadfca;
-	border-radius: 10px;
-	background: #fff;
+	padding: 9px 14px;
+	border-radius: var(--r-md);
+	background: var(--card);
+	box-shadow: var(--shadow-sm);
 	font-size: 14px;
 }
 .grouprow .gname {
@@ -544,7 +550,8 @@ h1 {
 	min-width: 4.5em;
 }
 .grouprow .gcount {
-	color: #9a8a70;
+	color: var(--ink-faint);
+	font-family: var(--font-mono);
 }
 .grouprow .gstatus {
 	flex: 1;
@@ -553,7 +560,7 @@ h1 {
 	color: var(--danger);
 }
 .grouprow.done .gstatus {
-	color: #2e7d32;
+	color: var(--bamboo-dark);
 }
 .grouprow.uploading .gstatus,
 .grouprow.compressing .gstatus,
@@ -565,10 +572,10 @@ h1 {
 	align-items: center;
 	gap: 10px;
 	flex-wrap: wrap;
-	padding: 10px 12px;
-	border: 1px solid #eadfca;
-	border-radius: 10px;
-	background: #fff;
+	padding: 12px 14px;
+	border-radius: var(--r-md);
+	background: var(--card);
+	box-shadow: var(--shadow-sm);
 }
 .artmain {
 	display: flex;
@@ -582,7 +589,7 @@ h1 {
 	font-weight: 600;
 }
 .sub {
-	color: #9a8a70;
+	color: var(--ink-soft);
 	font-size: 13px;
 }
 .pgdots {
@@ -600,9 +607,10 @@ h1 {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+	font-family: var(--font-mono);
 }
 .dot.done {
-	background: #4caf50;
+	background: var(--bamboo);
 }
 .dot.pending {
 	background: #d9a441;
@@ -625,5 +633,29 @@ h1 {
 .back {
 	margin-top: 16px;
 	font-size: 14px;
+	color: var(--ink-faint);
+	text-decoration: none;
+}
+.back:hover {
+	color: var(--accent);
+}
+
+@media (min-width: 720px) {
+	.wrap {
+		max-width: 720px;
+	}
+	.thumbs {
+		grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+	}
+}
+
+@media (min-width: 1100px) and (orientation: landscape) {
+	.wrap {
+		max-width: 900px;
+	}
+	.artrow,
+	.grouprow {
+		padding: 12px 18px;
+	}
 }
 </style>

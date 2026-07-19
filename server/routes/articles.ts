@@ -11,7 +11,7 @@ interface ArticleRow {
 	cover_version: number | null;
 	created_at: string;
 	page_count: number;
-	has_clicks?: number;
+	has_read?: number;
 }
 
 interface PageRow {
@@ -33,8 +33,8 @@ export const articleRoutes = new Hono<AppEnv>()
 			`SELECT a.id, a.title, a.status, a.cover_key, a.created_at,
 			        (SELECT COUNT(*) FROM pages p WHERE p.article_id = a.id) AS page_count,
 			        (SELECT image_version FROM pages p WHERE p.article_id = a.id AND p.page_no = 1) AS cover_version,
-			        EXISTS(SELECT 1 FROM tap_events t WHERE t.article_id = a.id) AS has_clicks
-			 FROM articles a ${where} ORDER BY has_clicks ASC, a.id ASC`,
+			        EXISTS(SELECT 1 FROM reading_sessions s WHERE s.article_id = a.id) AS has_read
+			 FROM articles a ${where} ORDER BY has_read ASC, a.id ASC`,
 		).all<ArticleRow>();
 
 		return c.json(

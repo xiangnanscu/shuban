@@ -6,6 +6,7 @@ import type { AiProviderName, AiSettings, ArticleSummary, RecordingSettings } fr
 
 const router = useRouter();
 const articles = ref<ArticleSummary[]>([]);
+const selected = ref<Set<number>>(new Set());
 const msg = ref('');
 const showPinForm = ref(false);
 const oldPin = ref('');
@@ -100,27 +101,44 @@ async function saveRecSettings() {
 
 async function load() {
 	articles.value = await api<ArticleSummary[]>('/api/articles');
+	selected.value.clear();
 }
 onMounted(load);
 
-async function toggleStatus(a: ArticleSummary) {
-	await api(`/api/admin/articles/${a.id}`, {
+function toggleSelect(id: number) {
+	if (selected.value.has(id)) selected.value.delete(id);
+	else selected.value.add(id);
+}
+
+function toggleSelectAll() {
+	if (selected.value.size === articles.value.length) selected.value.clear();
+	else selected.value = new Set(articles.value.map((a) => a.id));
+}
+
+async function batchSetStatus(status: 'draft' | 'published') {
+	if (!selected.value.size) return;
+	await api('/api/admin/articles/batch', {
 		method: 'PUT',
-		body: JSON.stringify({ status: a.status === 'published' ? 'draft' : 'published' }),
+		body: JSON.stringify({ ids: [...selected.value], status }),
 	});
+	msg.value = status === 'published' ? '已发布选中文章' : '已下架选中文章';
 	await load();
 }
 
-async function remove(a: ArticleSummary) {
-	if (!confirm(`删除《${a.title || '未命名'}》？图片与识别结果将一并删除，不可恢复。`)) return;
-	await api(`/api/admin/articles/${a.id}`, { method: 'DELETE' });
+async function batchRemove() {
+	if (!selected.value.size) return;
+	if (!confirm(`删除选中的 ${selected.value.size} 篇文章？图片与识别结果将一并删除，不可恢复。`)) return;
+	await api('/api/admin/articles/batch', { method: 'DELETE', body: JSON.stringify({ ids: [...selected.value] }) });
+	msg.value = '已删除选中文章';
 	await load();
 }
 
-async function clearTaps(a: ArticleSummary) {
-	if (!confirm(`清除《${a.title || '未命名'}》的点击历史？生字池与答题记录不受影响，不可恢复。`)) return;
-	await api(`/api/admin/articles/${a.id}/taps`, { method: 'DELETE' });
+async function batchClearTaps() {
+	if (!selected.value.size) return;
+	if (!confirm(`清除选中 ${selected.value.size} 篇文章的点击历史？生字池与答题记录不受影响，不可恢复。`)) return;
+	await api('/api/admin/articles/batch/taps', { method: 'DELETE', body: JSON.stringify({ ids: [...selected.value] }) });
 	msg.value = '点击历史已清除';
+	selected.value.clear();
 }
 
 async function clearAllTaps() {
@@ -238,9 +256,24 @@ async function logout() {
 
 		<p v-if="msg" class="hint">{{ msg }}</p>
 
+		<div v-if="articles.length" class="batchbar">
+			<label class="checkline">
+				<input type="checkbox" :checked="selected.size > 0 && selected.size === articles.length" @change="toggleSelectAll" />
+				全选
+			</label>
+			<span class="hint small">已选 {{ selected.size }} 篇</span>
+			<button type="button" class="btn ghost small" :disabled="!selected.size" @click="batchSetStatus('published')">批量发布</button>
+			<button type="button" class="btn ghost small" :disabled="!selected.size" @click="batchSetStatus('draft')">批量下架</button>
+			<button type="button" class="btn ghost small" :disabled="!selected.size" @click="batchClearTaps">批量清除点击历史</button>
+			<button type="button" class="btn danger small" :disabled="!selected.size" @click="batchRemove">批量删除</button>
+		</div>
+
 		<table v-if="articles.length" class="list">
 			<tbody>
 				<tr v-for="a in articles" :key="a.id">
+					<td class="sel">
+						<input type="checkbox" :checked="selected.has(a.id)" @change="toggleSelect(a.id)" />
+					</td>
 					<td class="t">
 						{{ a.title || '未命名' }}
 						<span class="chip" :class="a.status">{{ a.status === 'published' ? '已发布' : '草稿' }}</span>
@@ -248,11 +281,6 @@ async function logout() {
 					<td class="meta">{{ a.pageCount }} 页</td>
 					<td class="ops">
 						<RouterLink class="btn ghost small" :to="`/admin/proofread/${a.id}`">校对</RouterLink>
-						<button type="button" class="btn ghost small" @click="toggleStatus(a)">
-							{{ a.status === 'published' ? '下架' : '发布' }}
-						</button>
-						<button type="button" class="btn ghost small" @click="clearTaps(a)">清除点击历史</button>
-						<button type="button" class="btn danger small" @click="remove(a)">删除</button>
 					</td>
 				</tr>
 			</tbody>
@@ -327,15 +355,32 @@ h1 {
 	font-size: 12px;
 	margin: 0;
 }
+.batchbar {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+	margin-top: 20px;
+}
+.batchbar .checkline {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 14px;
+	font-weight: 600;
+}
 .list {
 	width: 100%;
-	margin-top: 20px;
+	margin-top: 10px;
 	border-collapse: collapse;
 }
 .list td {
 	padding: 12px 8px;
 	border-bottom: 1px solid #eadfca;
 	vertical-align: middle;
+}
+.list td.sel {
+	width: 32px;
 }
 .t {
 	font-size: 17px;

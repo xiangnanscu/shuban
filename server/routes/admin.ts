@@ -184,6 +184,60 @@ export const adminRoutes = new Hono<AppEnv>()
 		return c.json(ok({ articles: created }));
 	})
 
+	// 批量发布/下架
+	.put('/articles/batch', async (c) => {
+		const body = await c.req.json<{ ids?: number[]; status?: 'draft' | 'published' }>().catch(() => null);
+		const ids = body?.ids;
+		if (!Array.isArray(ids) || !ids.length || !ids.every((id) => Number.isInteger(id))) return c.json(err('bad_ids', 'ids 非法'), 400);
+		if (body?.status !== 'published' && body?.status !== 'draft') return c.json(err('bad_status', 'status 非法'), 400);
+		const placeholders = ids.map((_, i) => `?${i + 2}`).join(',');
+		await c.env.DB.prepare(
+			`UPDATE articles SET status = ?1, published_at = CASE WHEN ?1 = 'published' THEN datetime('now') ELSE published_at END WHERE id IN (${placeholders})`,
+		)
+			.bind(body!.status, ...ids)
+			.run();
+		return c.json(ok({ ids }));
+	})
+
+	// 批量删除
+	.delete('/articles/batch', async (c) => {
+		const body = await c.req.json<{ ids?: number[] }>().catch(() => null);
+		const ids = body?.ids;
+		if (!Array.isArray(ids) || !ids.length || !ids.every((id) => Number.isInteger(id))) return c.json(err('bad_ids', 'ids 非法'), 400);
+		const placeholders = ids.map((_, i) => `?${i + 1}`).join(',');
+		const { results: pages } = await c.env.DB.prepare(`SELECT image_key FROM pages WHERE article_id IN (${placeholders})`)
+			.bind(...ids)
+			.all<{ image_key: string }>();
+		if (pages.length) await c.env.BUCKET.delete(pages.map((p) => p.image_key));
+		await c.env.DB.prepare(`DELETE FROM pages WHERE article_id IN (${placeholders})`)
+			.bind(...ids)
+			.run();
+		await c.env.DB.prepare(`DELETE FROM articles WHERE id IN (${placeholders})`)
+			.bind(...ids)
+			.run();
+		return c.json(ok({ ids }));
+	})
+
+	// 批量清除多篇文章的点击历史（tap_events），并重算受影响字的 total_taps
+	.delete('/articles/batch/taps', async (c) => {
+		const body = await c.req.json<{ ids?: number[] }>().catch(() => null);
+		const ids = body?.ids;
+		if (!Array.isArray(ids) || !ids.length || !ids.every((id) => Number.isInteger(id))) return c.json(err('bad_ids', 'ids 非法'), 400);
+		const placeholders = ids.map((_, i) => `?${i + 1}`).join(',');
+		const { results } = await c.env.DB.prepare(`SELECT DISTINCT ch FROM tap_events WHERE article_id IN (${placeholders})`)
+			.bind(...ids)
+			.all<{ ch: string }>();
+		await c.env.DB.prepare(`DELETE FROM tap_events WHERE article_id IN (${placeholders})`)
+			.bind(...ids)
+			.run();
+		for (const { ch } of results) {
+			await c.env.DB.prepare('UPDATE chars SET total_taps = (SELECT COUNT(*) FROM tap_events WHERE ch = ?1) WHERE ch = ?1')
+				.bind(ch)
+				.run();
+		}
+		return c.json(ok({ ids, cleared: results.length }));
+	})
+
 	// 单页替换原图（校对时修正拍歪/拍倒），替换后自动重新识别
 	.post('/pages/:id/image', async (c) => {
 		const pageId = Number(c.req.param('id'));

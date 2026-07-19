@@ -59,6 +59,10 @@ async function startRecording() {
 async function finishRecording() {
 	const result = rec.stop();
 	if (!result) return;
+	if (result.durationSec < 10) {
+		rec.discard();
+		return;
+	}
 	recSaving.value = true;
 	recMsg.value = '';
 	try {

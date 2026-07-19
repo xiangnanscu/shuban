@@ -14,7 +14,8 @@ const articleId = Number(route.params.id);
 
 const article = ref<ArticleDetail | null>(null);
 const pool = ref<Set<string>>(new Set());
-const showImage = ref(false);
+const isWideLandscape = () => window.matchMedia('(min-width: 900px) and (orientation: landscape)').matches;
+const showImage = ref(isWideLandscape());
 const error = ref('');
 
 // 从重读计划跳来时，?focus= 指定要重点复习的字（高亮更醒目并滚动定位）
@@ -256,7 +257,7 @@ function stopListen() {
 				</label>
 			</div>
 
-			<section v-for="(pg, pi) in article.pages" :key="pg.id" class="page-section">
+			<section v-for="(pg, pi) in article.pages" :key="pg.id" class="page-section" :class="{ 'has-image': showImage }">
 				<img v-if="showImage" :src="pg.imageUrl" class="original" alt="原书页面" />
 
 				<main class="content">
@@ -395,5 +396,27 @@ function stopListen() {
 .hint {
 	color: #9a8a70;
 	text-align: center;
+}
+
+@media (min-width: 900px) and (orientation: landscape) {
+	.page {
+		max-width: 1400px;
+	}
+	.page-section.has-image {
+		display: flex;
+		align-items: flex-start;
+		gap: 24px;
+	}
+	.page-section.has-image .original {
+		flex: 1 1 50%;
+		max-width: 50%;
+		position: sticky;
+		top: 64px;
+		margin-bottom: 0;
+	}
+	.page-section.has-image .content {
+		flex: 1 1 50%;
+		min-width: 0;
+	}
 }
 </style>

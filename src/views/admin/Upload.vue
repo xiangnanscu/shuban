@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { api, ApiError } from '@/composables/useApi';
+import { api, apiUpload, ApiError } from '@/composables/useApi';
 import { compressImage } from '@/lib/compressImage';
 import type { AiSettings, ArticleDetail } from '@/types';
 
@@ -19,7 +19,8 @@ interface BatchArticle {
 	pages: BatchPage[];
 }
 
-type GroupStatus = 'pending' | 'compressing' | 'uploading' | 'done' | 'error';
+// uploading=图片仍在网络传输；processing=已全部送达服务器，AI 正在分篇/识别（此后即使关闭浏览器也不影响后台识别）
+type GroupStatus = 'pending' | 'compressing' | 'uploading' | 'processing' | 'done' | 'error';
 interface FileItem {
 	file: File;
 	url: string;
@@ -31,6 +32,7 @@ interface BatchGroup {
 	status: GroupStatus;
 	error: string;
 	articleCount: number;
+	uploadPct: number;
 }
 
 // 本地一次可选很多张（几百张），实际每次提交给后端识别的张数由 batchGroupSize 控制
@@ -59,7 +61,9 @@ onMounted(async () => {
 // —— 批量分组处理（自动分篇模式下，本地按 batchGroupSize 分组、并发提交）——
 const groups = ref<BatchGroup[]>([]);
 const groupsProcessing = computed(() =>
-	groups.value.some((g) => g.status === 'pending' || g.status === 'compressing' || g.status === 'uploading'),
+	groups.value.some(
+		(g) => g.status === 'pending' || g.status === 'compressing' || g.status === 'uploading' || g.status === 'processing',
+	),
 );
 const groupsFailedCount = computed(() => groups.value.filter((g) => g.status === 'error').length);
 
@@ -103,6 +107,7 @@ function removeAt(i: number) {
 async function processGroup(g: BatchGroup) {
 	g.status = 'compressing';
 	g.error = '';
+	g.uploadPct = 0;
 	try {
 		const form = new FormData();
 		for (const [i, item] of g.items.entries()) {
@@ -115,9 +120,13 @@ async function processGroup(g: BatchGroup) {
 			}
 		}
 		g.status = 'uploading';
-		const { articles } = await api<{
+		const { articles } = await apiUpload<{
 			articles: { articleId: number; title: string; pages: { id: number; pageNo: number; ocrStatus?: OcrStatus }[] }[];
-		}>('/api/admin/articles/batch', { method: 'POST', body: form });
+		}>('/api/admin/articles/batch', form, (pct) => {
+			g.uploadPct = pct;
+			// 上传字节全部发出＝图片已送达服务器；接下来是服务器端 AI 分篇/识别，与网络无关
+			if (pct >= 100 && g.status === 'uploading') g.status = 'processing';
+		});
 		results.value.push(
 			...articles.map((a) => ({
 				articleId: a.articleId,
@@ -156,7 +165,14 @@ async function submit() {
 			const size = Math.max(1, Math.floor(batchGroupSize.value) || 10);
 			const chunks: FileItem[][] = [];
 			for (let i = 0; i < files.value.length; i += size) chunks.push(files.value.slice(i, i + size));
-			groups.value = chunks.map((items, i) => ({ id: i + 1, items, status: 'pending', error: '', articleCount: 0 }));
+			groups.value = chunks.map((items, i) => ({
+				id: i + 1,
+				items,
+				status: 'pending',
+				error: '',
+				articleCount: 0,
+				uploadPct: 0,
+			}));
 			progress.value = `并发处理 ${groups.value.length} 组…`;
 			await Promise.allSettled(groups.value.map((g) => processGroup(g)));
 			for (const item of files.value) URL.revokeObjectURL(item.url);
@@ -260,7 +276,7 @@ onBeforeUnmount(stopPolling);
 					🚀 正在并发处理 {{ groups.length }} 组（每组最多 {{ batchGroupSize }} 张，前端本地分组）…
 				</p>
 				<p v-else-if="groupsFailedCount" class="banner run">⚠️ {{ groupsFailedCount }}/{{ groups.length }} 组提交失败，可点击重试</p>
-				<p v-else class="banner ok">✅ {{ groups.length }} 组已全部提交后端识别</p>
+				<p v-else class="banner ok">✅ 图片已全部送达服务器并加入后台识别队列，可安全关闭本页</p>
 
 				<ul class="grouplist">
 					<li v-for="g in groups" :key="g.id" class="grouprow" :class="g.status">
@@ -268,9 +284,10 @@ onBeforeUnmount(stopPolling);
 						<span class="gcount">{{ g.items.length }} 张</span>
 						<span class="gstatus">
 							<template v-if="g.status === 'pending'">等待中</template>
-							<template v-else-if="g.status === 'compressing'">压缩中…</template>
-							<template v-else-if="g.status === 'uploading'">上传识别中…</template>
-							<template v-else-if="g.status === 'done'">✅ 完成，{{ g.articleCount }} 篇</template>
+							<template v-else-if="g.status === 'compressing'">压缩图片中…</template>
+							<template v-else-if="g.status === 'uploading'">上传中 {{ g.uploadPct }}%</template>
+							<template v-else-if="g.status === 'processing'">已送达服务器，AI 识别中…</template>
+							<template v-else-if="g.status === 'done'">✅ 完成，{{ g.articleCount }} 篇，已入后台识别队列</template>
 							<template v-else>❌ {{ g.error || '失败' }}</template>
 						</span>
 						<button v-if="g.status === 'error'" type="button" class="btn ghost small" @click="retryGroup(g)">重试</button>
@@ -539,7 +556,8 @@ h1 {
 	color: #2e7d32;
 }
 .grouprow.uploading .gstatus,
-.grouprow.compressing .gstatus {
+.grouprow.compressing .gstatus,
+.grouprow.processing .gstatus {
 	color: var(--accent);
 }
 .artrow {

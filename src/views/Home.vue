@@ -39,12 +39,8 @@ onMounted(async () => {
 			<p class="hint">请家长到 <RouterLink to="/admin">家长区</RouterLink> 拍照上传第一篇绘本。</p>
 		</div>
 
-		<div v-else class="grid">
+		<div v-else class="list">
 			<RouterLink v-for="a in articles" :key="a.id" class="card" :to="`/read/${a.id}`">
-				<div class="cover">
-					<img v-if="a.coverUrl" :src="a.coverUrl" :alt="a.title" loading="lazy" />
-					<div v-else class="cover-fallback">📖</div>
-				</div>
 				<div class="card-title">{{ a.title || '未命名' }}</div>
 				<div class="card-meta">{{ a.pageCount }} 页</div>
 			</RouterLink>
@@ -96,44 +92,31 @@ h1 {
 	background: #e8ddc6;
 	color: #8a6d3b;
 }
-.grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-	gap: 16px;
+.list {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
 }
 .card {
 	background: #fff;
 	border-radius: 16px;
-	overflow: hidden;
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 14px 16px;
 	text-decoration: none;
 	color: var(--ink);
 	box-shadow: 0 2px 8px rgba(90, 70, 40, 0.12);
 }
-.cover {
-	aspect-ratio: 3 / 4;
-	background: #f3ead9;
-}
-.cover img {
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-}
-.cover-fallback {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	height: 100%;
-	font-size: 48px;
-}
 .card-title {
 	font-size: 18px;
 	font-weight: 600;
-	padding: 8px 10px 2px;
 }
 .card-meta {
 	font-size: 13px;
 	color: #9a8a70;
-	padding: 0 10px 10px;
+	white-space: nowrap;
 }
 .empty {
 	text-align: center;

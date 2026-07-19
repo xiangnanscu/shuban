@@ -32,7 +32,13 @@ export interface AiSettings {
 	segCompress: boolean;
 	/** 组合模式：一次 prompt 同时完成分篇+逐页识别；简单页面更快、更省调用，默认关闭 */
 	segCombined: boolean;
+	/** 前端批量上传时，单次提交给后端识别的最大张数；超出则前端自动分组、并发多次提交 */
+	batchGroupSize: number;
 }
+
+/** 单次批量识别请求最多接受的图片数（服务端硬上限，batchGroupSize 不可超过它） */
+export const MAX_BATCH_IMAGES = 20;
+export const DEFAULT_BATCH_GROUP_SIZE = 10;
 
 const AI_KEY = {
 	primaryProvider: 'ai_primary_provider',
@@ -43,10 +49,11 @@ const AI_KEY = {
 	timeoutMs: 'ai_timeout_ms',
 	segCompress: 'ai_seg_compress',
 	segCombined: 'ai_seg_combined',
+	batchGroupSize: 'ai_batch_group_size',
 } as const satisfies Record<keyof AiSettings, string>;
 
 export async function getAiSettings(db: D1Database): Promise<AiSettings> {
-	const [primaryProvider, geminiModel, workersaiModel, claudeModel, mimoModel, timeoutMs, segCompress, segCombined] =
+	const [primaryProvider, geminiModel, workersaiModel, claudeModel, mimoModel, timeoutMs, segCompress, segCombined, batchGroupSize] =
 		await Promise.all([
 			getSetting(db, AI_KEY.primaryProvider),
 			getSetting(db, AI_KEY.geminiModel),
@@ -56,7 +63,9 @@ export async function getAiSettings(db: D1Database): Promise<AiSettings> {
 			getSetting(db, AI_KEY.timeoutMs),
 			getSetting(db, AI_KEY.segCompress),
 			getSetting(db, AI_KEY.segCombined),
+			getSetting(db, AI_KEY.batchGroupSize),
 		]);
+	const groupSizeNum = batchGroupSize ? Number(batchGroupSize) : NaN;
 	return {
 		primaryProvider: (AI_PROVIDERS as readonly string[]).includes(primaryProvider ?? '')
 			? (primaryProvider as AiProviderName)
@@ -68,6 +77,10 @@ export async function getAiSettings(db: D1Database): Promise<AiSettings> {
 		timeoutMs: timeoutMs && Number(timeoutMs) > 0 ? Number(timeoutMs) : null,
 		segCompress: segCompress !== '0',
 		segCombined: segCombined === '1',
+		batchGroupSize:
+			Number.isFinite(groupSizeNum) && groupSizeNum > 0
+				? Math.min(Math.round(groupSizeNum), MAX_BATCH_IMAGES)
+				: DEFAULT_BATCH_GROUP_SIZE,
 	};
 }
 

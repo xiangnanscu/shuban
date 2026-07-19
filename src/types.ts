@@ -117,6 +117,8 @@ export interface AiSettings {
 	timeoutMs: number | null;
 	segCompress: boolean;
 	segCombined: boolean;
+	/** 前端批量上传时，单次提交给后端识别的最大张数；超出则前端自动分组、并发多次提交 */
+	batchGroupSize: number;
 	defaults: {
 		providerOrder: AiProviderName[];
 		geminiModel: string;
@@ -124,6 +126,8 @@ export interface AiSettings {
 		claudeModel: string;
 		mimoModel: string;
 		timeoutMs: number;
+		batchGroupSize: number;
+		maxBatchImages: number;
 	};
 }
 

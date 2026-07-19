@@ -8,7 +8,9 @@ import { segmentAndRecognizeImages } from '../ocr/combined';
 import {
 	AI_PROVIDERS,
 	type AiProviderName,
+	DEFAULT_BATCH_GROUP_SIZE,
 	DEFAULT_MAX_REC_SEC,
+	MAX_BATCH_IMAGES,
 	getAiSettings,
 	getMaxRecSec,
 	getSetting,
@@ -21,7 +23,7 @@ import { timingSafeEqual } from '../lib/bytes';
 import type { PageLine } from '../ocr';
 import type { Bindings } from '../env';
 
-const MAX_IMAGES = 20;
+const MAX_IMAGES = MAX_BATCH_IMAGES;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
@@ -37,6 +39,7 @@ async function aiSettingsPayload(env: Bindings) {
 		timeoutMs: s.timeoutMs,
 		segCompress: s.segCompress,
 		segCombined: s.segCombined,
+		batchGroupSize: s.batchGroupSize,
 		defaults: {
 			providerOrder: env.OCR_PROVIDER.split(',')
 				.map((x) => x.trim())
@@ -46,6 +49,8 @@ async function aiSettingsPayload(env: Bindings) {
 			claudeModel: env.CLAUDE_MODEL,
 			mimoModel: env.MIMO_MODEL,
 			timeoutMs: getProviderTimeoutMs(env),
+			batchGroupSize: DEFAULT_BATCH_GROUP_SIZE,
+			maxBatchImages: MAX_BATCH_IMAGES,
 		},
 	};
 }
@@ -372,6 +377,7 @@ export const adminRoutes = new Hono<AppEnv>()
 				timeoutMs?: number | string | null;
 				segCompress?: boolean | null;
 				segCombined?: boolean | null;
+				batchGroupSize?: number | string | null;
 			}>()
 			.catch(() => null);
 		if (!body) return c.json(err('bad_body', '请求体不是 JSON'), 400);
@@ -388,6 +394,16 @@ export const adminRoutes = new Hono<AppEnv>()
 				timeoutStr = String(Math.round(n));
 			}
 		}
+		let batchGroupSizeStr: string | null | undefined;
+		if (body.batchGroupSize !== undefined) {
+			if (body.batchGroupSize === null || body.batchGroupSize === '') batchGroupSizeStr = null;
+			else {
+				const n = Number(body.batchGroupSize);
+				if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) return c.json(err('bad_batch_size', '每组张数需为正整数'), 400);
+				if (n > MAX_BATCH_IMAGES) return c.json(err('bad_batch_size', `每组张数不能超过 ${MAX_BATCH_IMAGES}`), 400);
+				batchGroupSizeStr = String(n);
+			}
+		}
 
 		await setAiSettings(c.env.DB, {
 			...(body.primaryProvider !== undefined && { primaryProvider: body.primaryProvider }),
@@ -398,6 +414,7 @@ export const adminRoutes = new Hono<AppEnv>()
 			...(timeoutStr !== undefined && { timeoutMs: timeoutStr }),
 			...(body.segCompress !== undefined && { segCompress: body.segCompress === false ? '0' : null }),
 			...(body.segCombined !== undefined && { segCombined: body.segCombined === true ? '1' : null }),
+			...(batchGroupSizeStr !== undefined && { batchGroupSize: batchGroupSizeStr }),
 		});
 		return c.json(ok(await aiSettingsPayload(c.env)));
 	})

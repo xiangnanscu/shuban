@@ -19,23 +19,49 @@ interface BatchArticle {
 	pages: BatchPage[];
 }
 
+type GroupStatus = 'pending' | 'compressing' | 'uploading' | 'done' | 'error';
+interface FileItem {
+	file: File;
+	url: string;
+	rotation: Rotation;
+}
+interface BatchGroup {
+	id: number;
+	items: FileItem[];
+	status: GroupStatus;
+	error: string;
+	articleCount: number;
+}
+
+// 本地一次可选很多张（几百张），实际每次提交给后端识别的张数由 batchGroupSize 控制
+const MAX_PICK = 300;
+
 const router = useRouter();
 const title = ref('');
 const autoSplit = ref(false);
-const files = ref<{ file: File; url: string; rotation: Rotation }[]>([]);
+const files = ref<FileItem[]>([]);
 const busy = ref(false);
 const progress = ref('');
 const msg = ref('');
 const segCompress = ref(true);
+const batchGroupSize = ref(10);
 
 onMounted(async () => {
 	try {
 		const s = await api<AiSettings>('/api/admin/settings/ai');
 		segCompress.value = s.segCompress;
+		batchGroupSize.value = s.batchGroupSize || 10;
 	} catch {
-		// 拿不到设置就沿用默认（压缩）
+		// 拿不到设置就沿用默认（压缩 + 每组 10 张）
 	}
 });
+
+// —— 批量分组处理（自动分篇模式下，本地按 batchGroupSize 分组、并发提交）——
+const groups = ref<BatchGroup[]>([]);
+const groupsProcessing = computed(() =>
+	groups.value.some((g) => g.status === 'pending' || g.status === 'compressing' || g.status === 'uploading'),
+);
+const groupsFailedCount = computed(() => groups.value.filter((g) => g.status === 'error').length);
 
 // —— 分篇后的识别进度（自动识别到全部完成，无需人工确认）——
 const results = ref<BatchArticle[]>([]);
@@ -54,7 +80,7 @@ const failedCount = (a: BatchArticle) => a.pages.filter((p) => p.ocrStatus === '
 function onPick(e: Event) {
 	const input = e.target as HTMLInputElement;
 	for (const f of input.files ?? []) {
-		if (files.value.length >= 20) break;
+		if (files.value.length >= MAX_PICK) break;
 		files.value.push({ file: f, url: URL.createObjectURL(f), rotation: 0 });
 	}
 	input.value = '';
@@ -73,6 +99,46 @@ function removeAt(i: number) {
 	files.value.splice(i, 1);
 }
 
+// 压缩单组图片并提交给 /articles/batch；结果并入 results，供下方进度面板轮询
+async function processGroup(g: BatchGroup) {
+	g.status = 'compressing';
+	g.error = '';
+	try {
+		const form = new FormData();
+		for (const [i, item] of g.items.entries()) {
+			const blob = await compressImage(item.file, 1568, 0.85, item.rotation);
+			form.append('images', new File([blob], `${i + 1}.jpg`, { type: 'image/jpeg' }));
+			// 见下方 submit() 注释：分篇用缩略图省 token，家长关闭「分篇时压缩」则用原图分组
+			if (segCompress.value) {
+				const thumb = await compressImage(item.file, 1024, 0.6, item.rotation);
+				form.append('segThumbs', new File([thumb], `${i + 1}.jpg`, { type: 'image/jpeg' }));
+			}
+		}
+		g.status = 'uploading';
+		const { articles } = await api<{
+			articles: { articleId: number; title: string; pages: { id: number; pageNo: number; ocrStatus?: OcrStatus }[] }[];
+		}>('/api/admin/articles/batch', { method: 'POST', body: form });
+		results.value.push(
+			...articles.map((a) => ({
+				articleId: a.articleId,
+				title: a.title,
+				pages: a.pages.map((p) => ({ id: p.id, pageNo: p.pageNo, ocrStatus: p.ocrStatus ?? ('pending' as OcrStatus) })),
+			})),
+		);
+		g.articleCount = articles.length;
+		g.status = 'done';
+	} catch (e) {
+		g.status = 'error';
+		g.error = e instanceof ApiError ? e.message : '上传失败';
+	}
+}
+
+async function retryGroup(g: BatchGroup) {
+	if (g.status === 'compressing' || g.status === 'uploading') return;
+	await processGroup(g);
+	startPolling();
+}
+
 async function submit() {
 	if (files.value.length === 0) {
 		msg.value = '请先选择或拍摄图片';
@@ -82,36 +148,28 @@ async function submit() {
 	msg.value = '';
 	stopPolling();
 	results.value = [];
+	groups.value = [];
 	try {
-		const form = new FormData();
-		if (!autoSplit.value) form.set('title', title.value.trim());
-		for (const [i, item] of files.value.entries()) {
-			progress.value = `压缩图片 ${i + 1}/${files.value.length}…`;
-			const blob = await compressImage(item.file, 1568, 0.85, item.rotation);
-			form.append('images', new File([blob], `${i + 1}.jpg`, { type: 'image/jpeg' }));
-			// 自动分篇：额外生成小缩略图，只用于「分组+排序」推断（无需 OCR 级分辨率），
-			// 大幅降低一次性多图调用的 token 压力；正文仍用上面的全分辨率图识别。
-			// 家长关闭「分篇时压缩」后不传缩略图，服务端会退回用全分辨率图分组，牺牲 token/速度换成功率。
-			if (autoSplit.value && segCompress.value) {
-				const thumb = await compressImage(item.file, 1024, 0.6, item.rotation);
-				form.append('segThumbs', new File([thumb], `${i + 1}.jpg`, { type: 'image/jpeg' }));
-			}
-		}
 		if (autoSplit.value) {
-			progress.value = 'AI 正在按页码与语义分篇…';
-			const { articles } = await api<{
-				articles: { articleId: number; title: string; pages: { id: number; pageNo: number; ocrStatus?: OcrStatus }[] }[];
-			}>('/api/admin/articles/batch', { method: 'POST', body: form });
-			results.value = articles.map((a) => ({
-				articleId: a.articleId,
-				title: a.title,
-				// 组合模式可能已直接识别完（done）；两段式返回 pending，随后由轮询更新
-				pages: a.pages.map((p) => ({ id: p.id, pageNo: p.pageNo, ocrStatus: p.ocrStatus ?? ('pending' as OcrStatus) })),
-			}));
+			// 本地按配置的单次批量识别最大张数分组，各组并发向后端提交，
+			// AI 各自在组内按页码/语义分篇，最终结果汇总到 results 面板逐篇轮询识别进度。
+			const size = Math.max(1, Math.floor(batchGroupSize.value) || 10);
+			const chunks: FileItem[][] = [];
+			for (let i = 0; i < files.value.length; i += size) chunks.push(files.value.slice(i, i + size));
+			groups.value = chunks.map((items, i) => ({ id: i + 1, items, status: 'pending', error: '', articleCount: 0 }));
+			progress.value = `并发处理 ${groups.value.length} 组…`;
+			await Promise.allSettled(groups.value.map((g) => processGroup(g)));
 			for (const item of files.value) URL.revokeObjectURL(item.url);
 			files.value = [];
 			startPolling();
 		} else {
+			const form = new FormData();
+			form.set('title', title.value.trim());
+			for (const [i, item] of files.value.entries()) {
+				progress.value = `压缩图片 ${i + 1}/${files.value.length}…`;
+				const blob = await compressImage(item.file, 1568, 0.85, item.rotation);
+				form.append('images', new File([blob], `${i + 1}.jpg`, { type: 'image/jpeg' }));
+			}
 			progress.value = '上传并开始识别…';
 			const { articleId } = await api<{ articleId: number }>('/api/admin/articles', { method: 'POST', body: form });
 			void router.push(`/admin/proofread/${articleId}`);
@@ -186,6 +244,7 @@ async function retryPage(p: BatchPage) {
 function reset() {
 	stopPolling();
 	results.value = [];
+	groups.value = [];
 }
 
 onBeforeUnmount(stopPolling);
@@ -195,39 +254,64 @@ onBeforeUnmount(stopPolling);
 	<div class="wrap">
 		<h1>上传绘本</h1>
 
-		<div v-if="results.length" class="results">
-			<p v-if="allDone" class="banner ok">✅ 全部识别完成，共 {{ results.length }} 篇草稿，请逐篇校对后发布</p>
-			<p v-else class="banner run">🔍 已分为 {{ results.length }} 篇，正在后台逐篇识别正文…（识别在服务器进行，可关闭本页/浏览器，稍后回来校对）</p>
+		<div v-if="results.length || groups.length" class="results">
+			<div v-if="groups.length" class="grouppanel">
+				<p v-if="groupsProcessing" class="banner run">
+					🚀 正在并发处理 {{ groups.length }} 组（每组最多 {{ batchGroupSize }} 张，前端本地分组）…
+				</p>
+				<p v-else-if="groupsFailedCount" class="banner run">⚠️ {{ groupsFailedCount }}/{{ groups.length }} 组提交失败，可点击重试</p>
+				<p v-else class="banner ok">✅ {{ groups.length }} 组已全部提交后端识别</p>
 
-			<ul>
-				<li v-for="a in results" :key="a.articleId" class="artrow">
-					<div class="artmain">
-						<RouterLink class="tlink" :to="`/admin/proofread/${a.articleId}`">《{{ a.title || '未命名' }}》</RouterLink>
-						<span class="sub">
-							{{ doneCount(a) }}/{{ a.pages.length }} 页已识别<template v-if="failedCount(a)">
-								· {{ failedCount(a) }} 页失败（点红点重试）</template
-							>
+				<ul class="grouplist">
+					<li v-for="g in groups" :key="g.id" class="grouprow" :class="g.status">
+						<span class="gname">第 {{ g.id }} 组</span>
+						<span class="gcount">{{ g.items.length }} 张</span>
+						<span class="gstatus">
+							<template v-if="g.status === 'pending'">等待中</template>
+							<template v-else-if="g.status === 'compressing'">压缩中…</template>
+							<template v-else-if="g.status === 'uploading'">上传识别中…</template>
+							<template v-else-if="g.status === 'done'">✅ 完成，{{ g.articleCount }} 篇</template>
+							<template v-else>❌ {{ g.error || '失败' }}</template>
 						</span>
-					</div>
-					<div class="pgdots">
-						<button
-							v-for="p in a.pages"
-							:key="p.id"
-							type="button"
-							class="dot"
-							:class="p.ocrStatus"
-							:disabled="p.ocrStatus !== 'failed'"
-							:title="`第 ${p.pageNo} 页：${p.ocrStatus === 'done' ? '已识别' : p.ocrStatus === 'failed' ? '失败，点击重识别' : '识别中…'}`"
-							@click="retryPage(p)"
-						>
-							{{ p.pageNo }}
-						</button>
-					</div>
-					<RouterLink class="btn ghost small" :to="`/admin/proofread/${a.articleId}`">校对</RouterLink>
-				</li>
-			</ul>
+						<button v-if="g.status === 'error'" type="button" class="btn ghost small" @click="retryGroup(g)">重试</button>
+					</li>
+				</ul>
+			</div>
 
-			<div class="rowbtns">
+			<template v-if="results.length">
+				<p v-if="allDone" class="banner ok">✅ 全部识别完成，共 {{ results.length }} 篇草稿，请逐篇校对后发布</p>
+				<p v-else class="banner run">🔍 已分为 {{ results.length }} 篇，正在后台逐篇识别正文…（识别在服务器进行，可关闭本页/浏览器，稍后回来校对）</p>
+
+				<ul>
+					<li v-for="a in results" :key="a.articleId" class="artrow">
+						<div class="artmain">
+							<RouterLink class="tlink" :to="`/admin/proofread/${a.articleId}`">《{{ a.title || '未命名' }}》</RouterLink>
+							<span class="sub">
+								{{ doneCount(a) }}/{{ a.pages.length }} 页已识别<template v-if="failedCount(a)">
+									· {{ failedCount(a) }} 页失败（点红点重试）</template
+								>
+							</span>
+						</div>
+						<div class="pgdots">
+							<button
+								v-for="p in a.pages"
+								:key="p.id"
+								type="button"
+								class="dot"
+								:class="p.ocrStatus"
+								:disabled="p.ocrStatus !== 'failed'"
+								:title="`第 ${p.pageNo} 页：${p.ocrStatus === 'done' ? '已识别' : p.ocrStatus === 'failed' ? '失败，点击重识别' : '识别中…'}`"
+								@click="retryPage(p)"
+							>
+								{{ p.pageNo }}
+							</button>
+						</div>
+						<RouterLink class="btn ghost small" :to="`/admin/proofread/${a.articleId}`">校对</RouterLink>
+					</li>
+				</ul>
+			</template>
+
+			<div v-if="!groupsProcessing" class="rowbtns">
 				<button type="button" class="btn ghost" @click="reset">继续上传</button>
 				<RouterLink to="/admin" class="btn">返回家长区</RouterLink>
 			</div>
@@ -247,7 +331,7 @@ onBeforeUnmount(stopPolling);
 			<p class="hint">
 				{{
 					autoSplit
-						? '一次上传多篇文章的所有页面（顺序可乱），AI 会按页码、语义衔接、版式自动分组并排序，随后自动逐篇识别正文，直到全部完成。'
+						? `一次最多可选 ${MAX_PICK} 张（可跨多篇书，顺序可乱），前端会按每组 ${batchGroupSize} 张自动分组并发提交，AI 在组内按页码、语义衔接、版式自动分篇排序，随后自动逐篇识别正文，直到全部完成。`
 						: '按阅读顺序选择同一篇文章的页面照片（一张照片 = 一页），上传后自动识别文字与拼音。'
 				}}
 			</p>
@@ -269,7 +353,13 @@ onBeforeUnmount(stopPolling);
 			</div>
 
 			<button type="button" class="btn" :disabled="busy || files.length === 0" @click="submit">
-				{{ busy ? progress || '处理中…' : autoSplit ? `上传 ${files.length} 张并自动分篇` : `上传 ${files.length} 页并识别` }}
+				{{
+					busy
+						? progress || '处理中…'
+						: autoSplit
+							? `上传 ${files.length} 张（分 ${Math.max(1, Math.ceil(files.length / batchGroupSize))} 组并发处理）`
+							: `上传 ${files.length} 页并识别`
+				}}
 			</button>
 			<p v-if="msg" class="err">{{ msg }}</p>
 
@@ -407,6 +497,50 @@ h1 {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
+}
+.grouppanel {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.grouplist {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.grouprow {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+	padding: 8px 12px;
+	border: 1px solid #eadfca;
+	border-radius: 10px;
+	background: #fff;
+	font-size: 14px;
+}
+.grouprow .gname {
+	font-weight: 600;
+	min-width: 4.5em;
+}
+.grouprow .gcount {
+	color: #9a8a70;
+}
+.grouprow .gstatus {
+	flex: 1;
+}
+.grouprow.error .gstatus {
+	color: var(--danger);
+}
+.grouprow.done .gstatus {
+	color: #2e7d32;
+}
+.grouprow.uploading .gstatus,
+.grouprow.compressing .gstatus {
+	color: var(--accent);
 }
 .artrow {
 	display: flex;

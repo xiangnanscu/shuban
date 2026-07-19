@@ -27,6 +27,7 @@ const aiMimoModel = ref('');
 const aiTimeoutMs = ref('');
 const aiSegCompress = ref(true);
 const aiSegCombined = ref(false);
+const aiBatchGroupSize = ref('');
 
 const showRecForm = ref(false);
 const rec = ref<RecordingSettings | null>(null);
@@ -42,6 +43,7 @@ async function loadAiSettings() {
 	aiTimeoutMs.value = ai.value.timeoutMs ? String(ai.value.timeoutMs) : '';
 	aiSegCompress.value = ai.value.segCompress;
 	aiSegCombined.value = ai.value.segCombined;
+	aiBatchGroupSize.value = String(ai.value.batchGroupSize);
 }
 
 async function toggleAiForm() {
@@ -63,6 +65,7 @@ async function saveAiSettings() {
 				timeoutMs: String(aiTimeoutMs.value ?? '').trim() || null,
 				segCompress: aiSegCompress.value,
 				segCombined: aiSegCombined.value,
+				batchGroupSize: aiBatchGroupSize.value.trim() || null,
 			}),
 		});
 		msg.value = 'AI 设置已保存';
@@ -209,6 +212,13 @@ async function logout() {
 				分篇与识别合并为一次调用
 			</label>
 			<p class="hint small">开启后自动分篇时一次 prompt 同时完成分组与正文识别，简单页面更快、更省调用；页面复杂或漏识别的会自动退回逐页识别。仅 Gemini / Claude 支持。</p>
+			<label>
+				批量上传每组最大张数
+				<input v-model="aiBatchGroupSize" type="number" min="1" :max="ai.defaults.maxBatchImages" :placeholder="String(ai.defaults.batchGroupSize)" />
+			</label>
+			<p class="hint small">
+				一次性选很多张照片上传时，前端会按此张数自动分组、并发提交给后端识别，超过 {{ ai.defaults.maxBatchImages }} 无效（服务端硬上限）。留空即用出厂默认值 {{ ai.defaults.batchGroupSize }} 张。
+			</p>
 			<button class="btn small" type="submit">保存 AI 设置</button>
 		</form>
 
